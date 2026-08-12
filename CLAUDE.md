@@ -1,7 +1,9 @@
 # Agent Rules
 
-This repository stores durable engineering artifacts for AI infrastructure work.
-Product source code remains in its corresponding source repository.
+This repository is a personal AI assistant memory base. It stores durable,
+reviewable knowledge and collaboration artifacts so future work can retain
+context, reuse decisions, and build on prior findings. Product source code
+remains in its corresponding source repository.
 
 ## Hard rules
 
@@ -15,18 +17,19 @@ Product source code remains in its corresponding source repository.
   `YYYY-MM-DD-topic-zh.md`, using concise lowercase words separated by
   hyphens and an explicit language suffix.
 - Keep raw execution evidence in `logs/` and useful patch snapshots in
-  `patches/`; neither is a substitute for a readable report under `docs/`.
+  `patches/`; neither is a substitute for a readable, reusable document under
+  `docs/`.
 - If no existing directory clearly fits an artifact, ask before creating a new
   top-level or documentation category.
 
 ## Document locations
 
-- `docs/research/`: investigations, comparisons, and feasibility studies
-- `docs/designs/`: architecture and implementation designs
-- `docs/test-reports/`: test plans, results, and evidence summaries
-- `docs/reviews/`: code, patch, and design reviews
-- `docs/rca/`: incident and defect root-cause analyses
-- `docs/runbooks/`: repeatable operational procedures
+- `docs/research/`: research, comparisons, and feasibility studies
+- `docs/designs/`: plans, architecture, and important decisions
+- `docs/test-reports/`: test plans, results, and validation summaries
+- `docs/reviews/`: code, patch, design, and document reviews
+- `docs/rca/`: incident, mistake, and root-cause retrospectives
+- `docs/runbooks/`: repeatable workflows and operating procedures
 - `docs/templates/`: reusable document templates
 
 ## Before finishing
