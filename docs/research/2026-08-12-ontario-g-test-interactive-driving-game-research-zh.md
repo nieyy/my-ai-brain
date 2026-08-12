@@ -20,6 +20,7 @@
 | v0.7 | 2026-08-12 | nieyuanyuan | 明确 MVP 不收集匿名使用数据、不接入分析 SDK，练习记录只保存在用户本地浏览器。 |
 | v0.8 | 2026-08-12 | nieyuanyuan | 确认不录制第一视角/360° 素材；场景只需大致对应考点道路结构，优先保证考点知识和错误记忆，不追求街景级 1:1 复刻。 |
 | v0.9 | 2026-08-12 | nieyuanyuan | 确认现存三次可验证失败经历均有代表性、暂无其他反复错误，并明确目标用户是已通过 G2、需要熟悉 G Test 规则与考点路况的驾驶者。 |
+| v0.10 | 2026-08-12 | nieyuanyuan | 确认游戏使用独立 `ontario-g-test` 仓库，并要求考官指令统一采用 Ontario G Test 常见英文措辞，不安排教练或近期考生人工审核。 |
 
 ## 1. 摘要
 
@@ -96,7 +97,7 @@
 | 候选道路范围 | 市政府明确称限制教学区域覆盖 Newmarket DriveTest Centre 的各种考试路线，边界涉及 Gorham、Prospect、Bayview、Traviss、Leslie Valley、Leslie；Davis Drive 是主要通行道路 | [Town of Newmarket Restricted Area](https://www.newmarket.ca/resident-services/by-law-enforcement/restricted-area-driving-instructors-driving-schools) |
 | 候选高速链路 | 近期和历史用户报告多次出现 Harry Walker / Davis / Leslie、404 North、Green Lane、404 South，但也明确存在路线变化 | [2025 用户报告](https://www.reddit.com/r/Ontariodrivetest/comments/1mcz55n)、[2022 用户报告](https://www.reddit.com/r/Ontariodrivetest/comments/zzgwu1)；仅作线索，不作为官方路线 |
 | 教学限制 | Newmarket 的指定区域禁止驾驶教练/驾校为教学或备考而运营；私人车辆和正式考试不在该项禁止范围内 | [Town of Newmarket Restricted Area](https://www.newmarket.ca/resident-services/by-law-enforcement/restricted-area-driving-instructors-driving-schools)；网页模拟不在道路上运营，但产品应醒目提示当地限制 |
-| 发布目标 | 可直接使用独立项目站点，例如 `https://nieyy.github.io/ontario-g-test/`；不要求先建立根站点 | GitHub Pages 支持项目站点；Vite 官方说明项目站点只需设置对应 `base` 路径 |
+| 发布目标 | 使用独立仓库 `nieyy/ontario-g-test`，发布到 `https://nieyy.github.io/ontario-g-test/`；`my-ai-brain` 只保留调研、设计和复盘 | 用户确认；GitHub Pages 支持项目站点，Vite 的 `base` 设置为 `/ontario-g-test/` |
 
 #### 可验证的失败时间线（现存原始评分表）
 
@@ -149,6 +150,7 @@
 - 重要行为:
   - 考试模式中不给即时答案，避免“边开边教”破坏测评；练习模式才允许暂停、提示和重做。
   - 考官指令应像真实考试一样只说明方向或动作，例如 “At the next intersection, turn left”，不能提前透露正确操作。
+  - 所有考官语音和英文字幕统一使用 Ontario G Test 常见英文措辞，不使用中文口语直译；中文只作为辅助字幕。每条 `Prompt` 保存措辞来源或采用依据，并通过术语表和快照测试保证同类指令一致。
   - 关键动作不只用方向键表达。首版可用明确、可评分的输入：油门/刹车、转向灯、镜子、左右肩检、选择目标车道、接受/拒绝 gap。
   - 每个场景都保存上下文和事件时间线，报告不能只写“并线不好”，而要写成“并入时 67 km/h，主路目标车约 103 km/h，迫使后车减速；并入前 4.2 秒未做左肩检”。
   - 路线与规则分离：路线负责位置和考官指令，场景负责交通状态和评分，因此同一路段可以随机生成不同前车速度、gap 和灯色。
@@ -255,6 +257,7 @@
 | 2.5D 场景过度抽象 | 若车道、距离和视觉提示不清楚，玩家可能无法把训练迁移到真实道路 | 视觉重点必须经过手机/桌面可读性测试和近期考生审核 | High |
 | 参数化交通不自然 | 车辆移动、gap 或信号时序若不合理，会教出错误直觉 | 场景参数必须有物理边界并由规则测试覆盖 | High |
 | 误把“参考 Google Maps”做成内容复制 | 复制地图画面、样式或建立基于 Google 内容的新产品可能违反其条款 | Google Maps 附加条款限制复制内容及基于 Maps 创建新产品；实现数据改用政府开放资料或合规 OSM 数据 | High |
+| 考官措辞无人审核 | 不自然或不一致的英文可能形成错误预期 | 用户决定不安排教练/近期考生审核；用来源记录、受控术语表和自动快照测试降低风险，并避免宣称是 DriveTest 官方逐字脚本 | Medium |
 | Newmarket 教学限制区 | 产品文案若鼓励驾校在限制区带练，会造成合规问题 | Town of Newmarket Restricted Area By-law | Medium |
 | 地图/路况变化 | 施工、限速和标线变化会让手工场景过时 | 场景记录 `checkedAt` 和来源，定期复核 | Medium |
 | 训练迁移不等于通过保证 | 游戏改善决策，不等于验证真实车控、观察动作幅度和压力表现 | 模拟器/视频研究支持训练价值，但真实道路仍有差异 | High |
@@ -324,7 +327,7 @@
 | 本地进度 | IndexedDB 或 localStorage | 首版不收集个人信息、不需要后端；可导出/导入 JSON 备份 |
 | 可安装/离线 | Web App Manifest；验证需求后再加 service worker | 可以像 App 一样添加到主屏幕；避免过早缓存受条款限制的第三方地图素材 |
 | 测试 | Vitest + Playwright | 评分状态机单测、完整考试流程与响应式 E2E |
-| 发布 | GitHub Actions → GitHub Pages | 建议独立项目仓库，部署到 `nieyy.github.io/<项目名>/`，Vite 设置匹配的 `base` |
+| 发布 | 独立仓库 `nieyy/ontario-g-test`；GitHub Actions → GitHub Pages | 部署到 `https://nieyy.github.io/ontario-g-test/`，Vite `base` 固定为 `/ontario-g-test/` |
 
 **计分建议**:
 
@@ -339,9 +342,10 @@
 - 产品信息架构和考试/练习/复盘三种模式的交互流程。
 - `Route`、`Segment`、`Scenario`、`Prompt`、`ActionEvent`、`Rubric`、`Attempt` 的数据契约。
 - 场景播放器、考官指令、镜子/肩检输入、分支决策和素材降级策略。
+- 考官英文指令术语表、措辞来源字段、中文辅助字幕规则和一致性测试。
 - 严重错误判定、复盘时间线和个性化弱项权重算法。
-- Google API key 限制、配额、隐私政策、地图署名和不可缓存内容边界。
-- GitHub Pages 用户站点/项目站点选择和 base path 处理。
+- 零数据收集边界、开放道路数据署名和不使用付费地图服务的约束。
+- `nieyy/ontario-g-test` 独立仓库、GitHub Pages 项目站点和 `/ontario-g-test/` base path 处理。
 
 **不应该进入设计文档的内容**:
 
@@ -362,6 +366,7 @@
   - Canvas 动画不可用或低性能时，能够切换到静态 SVG/HTML 和文字说明，考试状态不丢失。
   - 一次考试的所有输入事件能重放，并生成同样评分。
   - 中英文指令、字幕、语音和路线事件保持同步。
+  - 所有考试模式指令只能从受控的 Ontario G Test 常见英文措辞库选择；测试禁止同一动作出现随意改写或中文直译英文。
   - 运行时不请求 Google Maps、Street View 或其他付费地图 API；构建产物不包含第三方 API key。
 - 端到端 / 运维:
   - Chrome、Safari、Firefox 桌面端完成 20 分钟流程；移动端完成触控流程。
@@ -385,12 +390,11 @@
 - [x] 产品定位采用第一视角场景式互动备考，不要求方向盘级连续驾驶或实时 3D。
 - [x] MVP 不使用 Google Street View。Dynamic Street View 需要启用 billing 且存在实际费用风险，不符合本项目“备考优先、无需追求绝对视觉效果”的约束。
 - [x] 当前没有自有/可授权实景素材不影响 MVP：使用项目内代码生成的 SVG/Canvas 2.5D 道路场景，不需要购买素材、地图服务或准备照片。
-- [x] MVP 采用独立项目仓库和项目子路径发布，例如 `nieyy.github.io/ontario-g-test/`；无需先创建根站点。
-- [ ] 游戏项目是否单独建仓库，还是放入现有 `my-ai-brain`？建议单独仓库，记忆库只保留调研/设计/复盘。
+- [x] 游戏使用独立仓库 `nieyy/ontario-g-test`，发布到 `https://nieyy.github.io/ontario-g-test/`；`my-ai-brain` 只保留调研、设计和复盘，不存放游戏实现。
 - [x] MVP 不收集匿名使用数据，也不接入分析 SDK、埋点或远程日志；练习历史和个人弱项只保存在用户本地浏览器。若以后确有统计需求，必须作为独立功能重新进行隐私设计并取得用户同意。
 - [x] 没有条件安全、合法地录制 Newmarket 第一视角/360° 素材，MVP 也不需要外拍。场景只需大致对应 Newmarket 考点的道路结构；若能基于政府开放资料或合规 OSM 数据提高拓扑精度则尽量提高，但不强求街景级 1:1 复刻。
 - [x] 现存三次可验证失败经历都有代表性，分别覆盖路权/危险干预、普通错误累积、高速并入及影响其他车辆；目前没有确认出其他反复错误。个人经历只作为公共场景种子，完整题库仍须覆盖 MTO 官方 G Test 范围。
-- [ ] 是否需要考官指令完全使用 Ontario 考试常见英文措辞，并由本地教练/近期考生审核？
+- [x] 考官指令完全使用 Ontario G Test 常见英文措辞，中文只作辅助字幕；不安排本地教练或近期考生审核。实现时记录措辞来源并做术语表/快照校验，但不宣称这些指令是 DriveTest 官方逐字脚本。
 
 ## 9. 来源记录
 
@@ -436,5 +440,5 @@
   - 建立候选路线的场景清单，使用 MTO、DriveTest、Town/York Region 开放资料和合规 OSM 数据逐点核验道路名称、车道数、路口/匝道拓扑、限速、标志和导向线，再映射到可复用道路模板；不复制 Google 地图或街景内容。
   - 以现存 3 份评分表建立“错误—官方规则—游戏场景”的可追溯矩阵；其余 4 份若以后找回，再按同一数据模型补录，不从记忆猜测具体扣分。
   - 用直路、十字路口、多车道转弯和高速并入四种 SVG/Canvas 模板验证车道、车辆距离、信号和观察目标在桌面/手机上是否足够清楚。
-  - 找 1 名 Ontario 合格驾驶教练或近期 Newmarket G 考生审核考官措辞、路线候选和评分 rubric。
+  - 建立 Ontario G Test 常见英文指令术语表，为每条指令记录来源或采用依据，并用自动测试检查术语、方向、字幕和触发时机一致性；不设置人工审核前置条件。
   - 制作低保真交互原型，验证“2.5D 道路场景 + 考官语音 + 操作决策 + 时间线复盘”是否足够有效；只对确实依赖动态变化的场景追加轻量动画。
