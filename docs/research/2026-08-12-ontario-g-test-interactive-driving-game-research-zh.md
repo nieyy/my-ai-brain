@@ -23,6 +23,7 @@
 | v0.10 | 2026-08-12 | nieyuanyuan | 确认游戏使用独立 `ontario-g-test` 仓库，并要求考官指令统一采用 Ontario G Test 常见英文措辞，不安排教练或近期考生人工审核。 |
 | v0.11 | 2026-08-12 | nieyuanyuan | 使用 Image 2.0 生成方案 A 的高保真界面概念图，展示第一视角道路、考官指令、观察操作、速度与考试进度。 |
 | v0.12 | 2026-08-12 | nieyuanyuan | 明确方案 A 的实际操作：鼠标/触摸可完成全部流程，键盘提供可选快捷键；车辆自动沿路线推进，玩家控制影响考试结果的观察、速度、信号、选道和 gap 决策。 |
+| v0.13 | 2026-08-12 | nieyuanyuan | 参考 BeamNG.drive、Euro Truck Simulator 2 和 Burnout Paradise 的官方键位，重新设计适合 Mac 的方向化键盘布局，并要求支持自定义改键。 |
 
 ## 1. 摘要
 
@@ -302,16 +303,21 @@
 
 **鼠标可以完成整场考试，手机和平板使用相同位置的触摸按钮；键盘只作为可选快捷方式。** 玩家不需要用鼠标拖动方向盘，也不需要连续控制车辆物理。车辆默认沿当前车道和考试路线实时推进，玩家负责考试真正关注的动作与时机：观察、打灯、调节速度、停车、选择车道和接受/拒绝 gap。
 
-| 玩家意图 | 鼠标 / 触摸 | 可选键盘 | 游戏中的结果 |
+| 玩家意图 | 鼠标 / 触摸 | 推荐键盘（Mac） | 游戏中的结果 |
 |---|---|---|---|
 | 加速 | 按住 `ACCELERATE` | `W` 或 `↑` | 速度按场景设定逐步上升，松开后维持或自然回落 |
-| 刹车 / 完全停车 | 按住 `BRAKE` | `Space` 或 `↓` | 速度逐步下降；只有实际到 `0 km/h` 才算完整停车 |
-| 左右转向灯 | 点击 `LEFT/RIGHT SIGNAL` | `Q` / `E` | 切换信号灯状态并记录开启、关闭时机 |
-| 查看后视镜 | 点击 `LEFT/RIGHT MIRROR` | `1` / `2` | 短暂放大对应镜面并记录观察事件，不暂停道路时间 |
-| 左右肩检 | 点击 `LEFT/RIGHT SHOULDER` | `3` / `4` | 视角短暂转向盲区并记录观察方向与时机 |
-| 变道 / 高速并入 | 在道路画面点击相邻目标车道；无障碍模式显示独立变道按钮 | `A` / `D` | 车辆开始向目标车道过渡；系统结合信号、镜检、肩检、速度差和 gap 评分 |
+| 刹车 / 完全停车 | 按住 `BRAKE` | `S` 或 `↓` | 速度逐步下降；只有实际到 `0 km/h` 才算完整停车 |
+| 左右转向灯 | 点击 `LEFT/RIGHT SIGNAL` | `,` / `.` | 相邻键与左右方向对应，切换信号灯并记录开启、关闭时机 |
+| 查看左右后视镜 | 点击 `LEFT/RIGHT MIRROR` | `Q` / `E` | 短暂放大对应镜面并记录观察事件，不暂停道路时间 |
+| 左右肩检 | 点击 `LEFT/RIGHT SHOULDER` | `Shift+Q` / `Shift+E` | 与同侧镜检共用方向键组，`Shift` 表示更深的盲区观察 |
+| 变道 / 高速并入 | 在道路画面点击相邻目标车道；无障碍模式显示独立变道按钮 | `A` / `D` 或 `←` / `→` | 车辆开始向目标车道过渡；系统结合信号、镜检、肩检、速度差和 gap 评分 |
 | 转弯 | 到达路口前选择正确车道并完成观察、信号和速度控制；车辆按考官指定方向通过路口 | 无额外按键 | 系统评分进弯准备、路权、轨迹和出弯车道，不考鼠标描绘转弯曲线 |
-| 接受 / 放弃 gap | 在目标车道可进入时点击该车道；不点击即继续等待 | `A` / `D` | 过早进入、迫使其他车辆制动或等到空间耗尽都会进入事件时间线 |
+| 接受 / 放弃 gap | 在目标车道可进入时点击该车道；不点击即继续等待 | `A` / `D` 或 `←` / `→` | 过早进入、迫使其他车辆制动或等到空间耗尽都会进入事件时间线 |
+| 暂停 / 菜单 | 点击暂停按钮 | `Esc` | 考试模式暂停时隐藏新增路况信息，避免借暂停作弊 |
+
+这套默认键位遵循成熟电脑驾驶游戏的共同模式，而不是机械复制某一款游戏：BeamNG.drive 默认用方向键控制油门、刹车和转向，用 `,` / `.` 控制左右转向灯；Euro Truck Simulator 2 同样把方向键用于驾驶，并把左右转向灯放在 `[` / `]`；Burnout Paradise 使用 `W/S/A/D` 驾驶。由此得到两个原则：高频驾驶动作集中在 `WASD`/方向键，左右成对功能使用键盘上相邻且具方向感的按键。`Q/E` 与 `Shift+Q/E` 的镜检/肩检组合是本项目根据同侧动作关系做的适配，不声称来自某款游戏默认设置。
+
+由于 MacBook 没有独立数字键盘，默认布局不依赖 numpad、功能键或 `Control/Command` 组合。设置页必须允许点击某个动作后按下新键完成改键，检测键位冲突，并把自定义布局仅保存在本地浏览器；同时提供“一键恢复默认”。屏幕按钮始终保留，因此键盘布局不能阻塞触摸和仅鼠标用户。
 
 考试模式不会在每个决策点自动暂停，也不会弹出选项问“正确答案是什么”。例如高速并入时，前车和主路车流持续移动；玩家需要先打灯、看镜子、肩检、加速匹配车流，再在认为安全的时刻点击目标车道。练习模式才允许暂停、慢放、显示距离/速度差并立即重做。
 
@@ -392,6 +398,7 @@
   - 一次考试的所有输入事件能重放，并生成同样评分。
   - 中英文指令、字幕、语音和路线事件保持同步。
   - 所有考试模式指令只能从受控的 Ontario G Test 常见英文措辞库选择；测试禁止同一动作出现随意改写或中文直译英文。
+  - 默认键位、方向键别名和用户自定义键位触发完全相同的 `ActionEvent`；改键冲突必须即时提示，刷新页面后仍保持设置。
   - 运行时不请求 Google Maps、Street View 或其他付费地图 API；构建产物不包含第三方 API key。
 - 端到端 / 运维:
   - Chrome、Safari、Firefox 桌面端完成 20 分钟流程；移动端完成触控流程。
@@ -452,6 +459,9 @@
 | [GitHub Pages custom workflows](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages) | 读取于 2026-08-12 | Actions 部署静态构建产物 |
 | [GitHub Pages: Creating a site](https://docs.github.com/en/pages/getting-started-with-github-pages/creating-a-github-pages-site) | 读取于 2026-08-12 | Pages 可发布静态文件，也可用 Actions 发布自定义构建产物 |
 | [Vite: Deploying a Static Site](https://vite.dev/guide/static-deploy.html) | 读取于 2026-08-12 | Vite 构建输出和 GitHub Pages 项目子路径部署方式 |
+| [BeamNG.drive Beginner's Guide](https://www.beamng.com/game/support/portal/gameplay/beginner-guide/) | 更新于 2024-11-29，读取于 2026-08-12 | 官方默认键位：方向键驾驶，`,` / `.` 为左右转向灯；支持在 Controls 中重新绑定 |
+| [Euro Truck Simulator 2 Manual](https://cdn.akamai.steamstatic.com/steam/apps/227300/manuals/ETS2_manual_en.pdf) | 读取于 2026-08-12 | 官方键位表：方向键驾驶，`[` / `]` 为左右转向灯，并支持完整改键 |
+| [Burnout Paradise Remastered PC Manual](https://eaassets-a.akamaihd.net/eahelp/manuals/bpr-pc-en.pdf) | 读取于 2026-08-12 | 官方键位表：`W/S/A/D` 分别用于加速、刹车和左右转向 |
 | [MDN: What is a PWA](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/What_is_a_progressive_web_app) | 读取于 2026-08-12 | 静态 Web App 可安装，service worker 可选用于离线能力 |
 | [MDN: Client-side storage](https://developer.mozilla.org/en-US/docs/Learn_web_development/Extensions/Client-side_APIs/Client-side_storage) | 读取于 2026-08-12 | 浏览器端保存练习历史和较大本地数据的能力 |
 | [Prabhakharan et al., Hazard perception training meta-analysis](https://pubmed.ncbi.nlm.nih.gov/38701558/) | 2024 | 57 篇研究；主动训练对驾驶员危险感知改善更稳定 |
