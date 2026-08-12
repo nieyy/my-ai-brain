@@ -1,33 +1,31 @@
-# AI Infra Helper
+# My AI Brain
 
-This repository manages durable artifacts produced during AI infrastructure
-engineering work. Source code stays in the relevant source project; this
-repository holds research, designs, test reports, reviews, RCA documents,
-runbooks, and selected supporting evidence.
+这是我的个人 AI 助理记忆库：用来沉淀可复用的研究结论、设计决策、工作流程、复盘与验证记录，让 AI 助理能够在后续协作中理解上下文、延续经验。
 
-## Structure
+它不是产品源码仓库；与具体代码实现相关的内容应保留在对应项目中，这里只存放经过整理、适合长期查阅的知识与工作产物。
+
+## 目录结构
 
 ```text
 docs/
-  templates/       Reusable document templates
-  research/        Technical research and feasibility studies
-  designs/         Architecture and implementation designs
-  test-reports/    Human-readable test reports
-  reviews/         Code, patch, and design reviews
-  rca/             Root-cause analyses
-  runbooks/        Repeatable operating procedures
-logs/              Local raw execution evidence
-patches/           Useful patch snapshots
-scripts/           Repository maintenance and helper scripts
+  templates/       可复用的文档模板
+  research/        调研、比较与可行性分析
+  designs/         方案设计与关键决策
+  test-reports/    测试计划、结果与验证记录
+  reviews/         代码、补丁与设计评审
+  rca/             问题复盘与根因分析
+  runbooks/        可重复执行的操作指南
+logs/              本地原始执行证据（通常不提交）
+patches/           有价值的补丁快照
+scripts/           仓库维护与辅助脚本
 ```
 
-## Working conventions
+## 使用约定
 
-- Start new documents from a matching file in `docs/templates/`.
-- Name dated documents `YYYY-MM-DD-topic-en.md` or
-  `YYYY-MM-DD-topic-zh.md`.
-- Keep durable conclusions in `docs/`, even when raw evidence lives in `logs/`.
-- Treat AI-generated material as draft content until it has been reviewed.
-- Do not commit secrets, large raw logs, archives, binaries, or data dumps.
+- 新文档优先从 `docs/templates/` 中相应的模板创建。
+- 按 `YYYY-MM-DD-topic-zh.md` 或 `YYYY-MM-DD-topic-en.md` 格式命名日期文档。
+- 将可长期复用的结论整理到 `docs/`；原始日志仅作为佐证。
+- AI 生成的内容视为草稿，提交前应由人确认事实、链接和结论。
+- 不提交密钥、令牌、私有地址、大型原始日志、归档文件或二进制文件。
 
-See `CLAUDE.md` for repository rules followed by coding agents.
+仓库协作规则见 `CLAUDE.md`（`AGENTS.md` 指向同一份规则）。
