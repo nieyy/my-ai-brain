@@ -5,7 +5,7 @@
 **状态**: Draft
 **源项目 / 分支**: `my-ai-brain / main`
 **源 commit / 版本**: `64df3aa`
-**相关请求 / 问题**: 基于 Newmarket DriveTest Centre（320 Harry Walker Parkway S）周边真实道路，设计可发布到 `https://nieyy.github.io/` 的第一视角互动式 G 牌考前训练游戏；个人考试复盘见[共享对话](https://chatgpt.com/share/6a7cd681-28a4-83ea-8361-758a9cb5dc29)。
+**相关请求 / 问题**: 基于个人历次 G 牌考试经历与 Newmarket DriveTest Centre（320 Harry Walker Parkway S）周边真实道路，设计可发布到 `https://nieyy.github.io/` 的第一视角互动式考前训练游戏。
 
 ## 修订记录
 
@@ -35,12 +35,12 @@
 - 本文不宣称掌握 DriveTest 的官方固定考试路线；实际路线与考官指令可能变化。
 - 不实现游戏、不创建 GitHub Pages 仓库、不采购地图服务。
 - 不替代 MTO 官方手册、合格教练或真实道路练习，也不保证通过考试。
-- 不根据公开分享页中无法加载的图片/PDF，猜测每次考试的完整扣分项。
+- 不根据尚未纳入调研的原始图片/PDF，猜测每次考试的完整扣分项。
 - 不在首版实现方向盘级车辆动力学、碰撞物理、多人模式或真实交通实时同步。
 
 **假设**:
 
-- 用户估计 G 牌考试失败约 7 次；公开共享对话能看到多次失败和“已经搞了 5 次”的阶段性描述，但不足以逐次核实准确总数。
+- 用户估计 G 牌考试失败约 7 次；准确次数和逐次扣分项尚待结合原始评分表确认。
 - 首要目标是训练观察和决策，而不是复刻车辆操控手感。
 - 首版面向桌面键盘/鼠标，并兼容手机触控；方向盘外设不属于 MVP。
 - 游戏以中文为主，考官语音建议同时支持英文原句和中文字幕。
@@ -53,7 +53,7 @@
   - `CLAUDE.md`
   - `scripts/validate_structure.py`
 - 使用的命令或查询:
-  - 浏览并提取公开 ChatGPT 分享页的可见对话内容。
+  - 汇总用户提供的个人历次考试复盘要点；原始记录不随本文公开。
   - 检查 `https://nieyy.github.io/` HTTP 状态和 `nieyy` 账号可访问仓库。
   - 检索 Ontario MTO、DriveTest、Town of Newmarket、GitHub Pages、Google Maps Platform、MapLibre 和 OpenStreetMap 官方资料。
   - 检索 Newmarket 路线的近期用户报告；此类来源仅用于发现候选道路，不视为官方路线证明。
@@ -63,7 +63,7 @@
   - Google Maps JavaScript API / Street View、MapLibre GL JS、OSM tile policy、GitHub Pages 官方文档。
   - 2024 年危险感知训练系统综述与北美视频危险感知研究。
 - 未验证的内容:
-  - 分享对话中的早期上传图片和评分表在公开页无法稳定读取。
+  - 早期考试图片和评分表未逐份纳入本次调研。
   - DriveTest 不公开保证某条固定路线；第三方和 Reddit 路线报告只能证明“曾有人走过”。
   - 每个候选路段当前 Street View 的拍摄日期、行驶方向、连接完整性和临时施工状态尚未逐点检查。
   - `nieyy.github.io` 用户站点仓库尚不存在；目标 URL 当前返回 404。
@@ -74,9 +74,9 @@
 
 | 区域 / 模块 | 当前行为 | 证据 |
 |---|---|---|
-| 个人复盘 | 用户估计失败约 7 次；文字复盘分散，容易被概括成过度简单的“死规则” | 共享对话中出现多次结果解读、再次失败以及“已经搞了 5 次”的阶段性记录；准确次数待人工确认 |
-| 2026-08-12 关键失败 | 低速并入高速导致影响主路车辆；多车道左转两次进入错误车道；另有跟随慢车/速度处理问题 | 共享对话可见的最终报告解读提到 `B_slow`、`cuts car off`、verbal intervention 和 `Wrong lane`；原 PDF 未能独立读取 |
-| 其他明确错误 | 红灯右转前未完全停车；黄灯时在尚未越过停止线且可停车的情况下继续进入路口 | 共享对话中用户于 7 月 6 日的现场复盘 |
+| 个人复盘 | 用户估计失败约 7 次；文字复盘分散，容易被概括成过度简单的“死规则” | 个人历次考试复盘摘要；原始记录不随本文公开，准确次数待人工确认 |
+| 近期典型问题 | 包括高速并入速度与空间判断、多车道转弯车道选择、跟随慢车时的决策 | 个人考试复盘提炼；逐项结论仍应以原始评分表和官方规则为准 |
+| 其他典型问题 | 包括红灯右转的完整停车，以及黄灯时停车或继续通过的情境判断 | 个人考试复盘提炼；本文仅用于形成训练场景，不公开原始记录 |
 | 官方 G Test 范围 | 目前仍测试主要道路/高速、汇入驶离、合理速度和空间、转弯、变道、路口和商业区；暂不包含平行停车、路边停车、三点掉头和住宅区驾驶 | [MTO Level Two Road Test](https://www.ontario.ca/document/official-mto-drivers-handbook/level-two-road-test)（更新于 2025-09-08） |
 | Newmarket 考点 | DriveTest 地址为 320 Harry Walker Parkway S，并提供 G 测试 | [DriveTest Centre List](https://drivetest.ca/find-a-drivetest-centre/alphabetical_list/) |
 | 候选道路范围 | 市政府明确称限制教学区域覆盖 Newmarket DriveTest Centre 的各种考试路线，边界涉及 Gorham、Prospect、Bayview、Traviss、Leslie Valley、Leslie；Davis Drive 是主要通行道路 | [Town of Newmarket Restricted Area](https://www.newmarket.ca/resident-services/by-law-enforcement/restricted-area-driving-instructors-driving-schools) |
@@ -111,6 +111,10 @@
   -> [按时间线回放：当时看到什么、做了什么、正确判断依据]
   -> [把错误加入个人弱项训练]
 ```
+
+![互动式 G Test 学习闭环](assets/2026-08-12-ontario-g-test-interactive-learning-loop-zh.png)
+
+图 1：真实道路模拟、事件记录与评分、时间线复盘和个人弱项再训练构成闭环。考试模式只给考官指令，不提供即时答案；练习模式才允许暂停、提示和重做。
 
 - 重要行为:
   - 考试模式中不给即时答案，避免“边开边教”破坏测评；练习模式才允许暂停、提示和重做。
@@ -166,7 +170,7 @@
 
 #### Finding 1: 最需要模拟的是“情境判断链”，不是背诵文字规则
 
-- 证据: 个人错误集中在同一规则随上下文变化的判断：黄灯是否停、前车慢时是否超、何时接受高速 gap。共享对话中还出现把“匹配车流”误记为“必须 110”的风险。2024 年 57 篇研究的系统综述/Meta-analysis 发现，危险感知训练对驾驶员有显著改善，主动训练比被动训练更稳定；北美视频研究也发现新手对危险反应更慢。
+- 证据: 个人复盘显示，问题集中在同一规则随上下文变化的判断：黄灯是否停、前车慢时是否超、何时接受高速 gap，也存在把“匹配车流”简化成“必须 110”的风险。2024 年 57 篇研究的系统综述/Meta-analysis 发现，危险感知训练对驾驶员有显著改善，主动训练比被动训练更稳定；北美视频研究也发现新手对危险反应更慢。
 - 为什么重要: 游戏必须呈现变化的车流、信号时机和空间，而不是把文字总结换成选择题皮肤。相同知识点至少需要 3–5 个参数化变体，防止玩家只记答案。
 - 置信度: High。
 
@@ -198,7 +202,7 @@
 
 | GAP / 风险 | 影响 | 证据 | 严重程度 |
 |---|---|---|---|
-| 早期考试报告不可读 | 无法把约 7 次失败完整编码成个人错误谱系 | 分享页的多张图片/PDF加载失败，只能看到用户文字和最新报告解读 | High |
+| 早期考试报告尚未完整整理 | 无法把约 7 次失败完整编码成个人错误谱系 | 当前仅汇总个人复盘要点，仍需逐份核对原始评分表 | High |
 | 路线并非官方固定 | 若宣传“真实官方路线”，会误导用户并快速过时 | 市政府称存在 various routes；社区报告相互有差异 | High |
 | Street View 非连续驾驶 | 方向盘/油门手感和精细车道保持训练有限 | API 提供全景节点和 POV，而非车辆物理世界 | High |
 | 静态照片不能生成动态交通 | 照片里的车不能代表本次模拟的 gap、速度和意图 | 动态交通必须由自有 overlay/场景引擎建立 | High |
@@ -342,7 +346,7 @@
 
 | 来源 | 日期 / 版本 | 备注 |
 |---|---|---|
-| [个人 ChatGPT 共享对话](https://chatgpt.com/share/6a7cd681-28a4-83ea-8361-758a9cb5dc29) | 读取于 2026-08-12 | 用户考试复盘；公开页面部分旧附件无法加载，不把 AI 旧回复本身视为官方依据 |
+| 个人历次 G 牌考试复盘 | 汇总于 2026-08-12 | 私有记录，不随本文公开；仅用于提炼需求和训练场景，事实以原始评分表及官方规则为准 |
 | [MTO: The Level Two Road Test](https://www.ontario.ca/document/official-mto-drivers-handbook/level-two-road-test) | 更新于 2025-09-08，读取于 2026-08-12 | 当前 G Test 范围、考官行为、任务与评分动作 |
 | [MTO: Freeway driving](https://www.ontario.ca/document/official-mto-drivers-handbook/freeway-driving) | 更新于 2026-06-01，读取于 2026-08-12 | 加速车道、匹配车流、避免 cut-off、驶离高速 |
 | [MTO: Traffic lights](https://www.ontario.ca/document/official-mto-drivers-handbook/traffic-lights) | 更新于 2026-03-31，读取于 2026-08-12 | 红灯右转前完整停车与让行 |
