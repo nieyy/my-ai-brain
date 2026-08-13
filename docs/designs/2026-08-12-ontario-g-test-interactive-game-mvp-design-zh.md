@@ -14,15 +14,16 @@
 | v0.2 | 2026-08-12 | nieyuanyuan | 明确 Phase 1 的 Newmarket 道路事实核验交付物、证据分级和 `authored` 教学抽象边界。 |
 | v0.3 | 2026-08-12 | nieyuanyuan | 明确 Phase 2 的 SVG 视觉验收对象、Mac/手机可判定标准，以及未通过时优先调整视觉编码而不扩大为实景或 3D。 |
 | v0.4 | 2026-08-12 | nieyuanyuan | 明确 Phase 3 的六类场景教学验收、反馈结构，以及危险记录不可被后续表现抵消的继续练习流程。 |
-| v0.5 | 2026-08-12 | nieyuanyuan | 明确 Phase 4 在公开 GitHub Pages 上的端到端 smoke test、手机与网络检查，以及通过后发布 `1.0.0` 的动作。 |
-| v1.0 | 2026-08-12 | nieyuanyuan | 正式版收口：修正反馈与继续练习状态契约，拆分 Phase 3 教学完成和本地数据里程碑，明确逐阶段交付证据、CI/E2E 命令与 release candidate 发布顺序，关闭开放问题。 |
+| v0.5 | 2026-08-12 | nieyuanyuan | 明确公开 GitHub Pages 上的端到端 smoke test、手机与网络检查，以及通过后发布 `1.0.0` 的动作。 |
+| v1.0 | 2026-08-12 | nieyuanyuan | 正式版收口：修正反馈与继续练习状态契约，将教学完成和本地数据拆成独立里程碑，明确逐阶段交付证据、CI/E2E 命令与 release candidate 发布顺序，关闭开放问题。 |
+| v1.1 | 2026-08-12 | nieyuanyuan | 将教学完成、本地数据和发布硬化统一编号为连续的 Phase 3、4、5，所有实现、验收报告和发布引用只使用数字顺序。 |
 
 ## 1. 摘要
 
 - 这个设计解决什么问题: 把 Ontario G Test 的规则、考官指令和考点周边道路类型转化为可操作、可重放、可复盘的网页训练，而不是继续依赖容易遗漏上下文的长篇文字总结。
 - 选择的方向: 在纯静态 React/Vite 应用中，以 Newmarket 为首个 `CentrePack`，使用 SVG 2.5D 第一视角场景、固定步长的确定性事件引擎、统一输入事件、规则评分器和本地事件记录实现考试、练习、复盘三种模式。
 - 预期结果: 用户可先选择 Newmarket，完成一场 15–20 分钟的模拟考试，听到常见英文考官指令，通过鼠标、触摸或 Mac 键盘完成观察、信号、速度、车道和 gap 决策，并得到按事件时间线组织的前三项改进建议和弱项短练习。
-- AI Agent 应该能根据本文直接实现什么: 按第 7 节四个阶段，在 `/Users/nieyuanyuan/Desktop/ccproj/nieyy/ontario-g-test` 中建立内容包、播放器、输入/计时/评分状态机、本地存储、报告和完整 Newmarket MVP，不需要临时决定产品边界或核心数据模型。
+- AI Agent 应该能根据本文直接实现什么: 按第 7 节五个阶段，在 `/Users/nieyuanyuan/Desktop/ccproj/nieyy/ontario-g-test` 中建立内容包、播放器、输入/计时/评分状态机、本地存储、报告和完整 Newmarket MVP，不需要临时决定产品边界或核心数据模型。
 - 实现起点: `nieyy/ontario-g-test` 的 `main @ 4a3923a`；后续若实现起点发生变化，先核对本设计第 3 节和实际 diff，不重新解释已锁定的产品边界。
 
 ## 2. 背景和目标
@@ -610,7 +611,7 @@ stateDiagram-v2
 
 ## 7. 分阶段实现与验证计划
 
-> 四个 Phase 必须按顺序执行；Phase 3 内含 3A/3B 两个串行里程碑。每个 Phase 或里程碑都要同时交付实现、自动化验证和可审阅证据，并在 Owner gate 停下。不得为了“顺手完成”跨阶段加入地图、后端、真实 3D、第二考点或未设计功能。
+> 五个 Phase 必须按数字顺序执行。每个 Phase 都要同时交付实现、自动化验证和可审阅证据，并在 Owner gate 停下。不得为了“顺手完成”跨阶段加入地图、后端、真实 3D、第二考点或未设计功能。
 
 ### 阶段依赖与交付证据
 
@@ -618,9 +619,9 @@ stateDiagram-v2
 |---|---|---|---|---|
 | Phase 1 | `main @ 4a3923a`，本设计已 Locked | 考点/内容契约、Newmarket 预览入口、道路事实清单 | Owner 内容核验 | `my-ai-brain/docs/test-reports/<date>-ontario-g-test-phase-1-content-validation-zh.md` |
 | Phase 2 | Phase 1 内容 gate 通过 | 5–8 分钟内存态垂直切片 | Owner Mac/手机视觉验收 | `...phase-2-visual-acceptance-zh.md` |
-| Phase 3A | Phase 2 视觉 gate 通过 | 六类场景、15–20 分钟完整路线、考试/练习/复盘 | Owner 教学验收 | `...phase-3-teaching-acceptance-zh.md` |
-| Phase 3B | Phase 3A 教学 gate 通过 | 本地历史、恢复、设置、弱项训练和导出 | 功能与数据可靠性 gate | 同一 Phase 3 报告追加结果 |
-| Phase 4 | Phase 3B 退出标准通过 | 发布候选、E2E/无障碍/性能硬化、公开 1.0 | Owner Pages 发布验收 | `...phase-4-release-acceptance-zh.md` |
+| Phase 3 | Phase 2 视觉 gate 通过 | 六类场景、15–20 分钟完整路线、考试/练习/复盘 | Owner 教学验收 | `...phase-3-teaching-acceptance-zh.md` |
+| Phase 4 | Phase 3 教学 gate 通过 | 本地历史、恢复、设置、弱项训练和导出 | 功能与数据可靠性 gate | `...phase-4-data-reliability-zh.md` |
+| Phase 5 | Phase 4 退出标准通过 | 发布候选、E2E/无障碍/性能硬化、公开 1.0 | Owner Pages 发布验收 | `...phase-5-release-acceptance-zh.md` |
 
 文件名中的 `<date>` 使用实际验收日期。每份报告至少记录实现 commit、内容/engine version、执行命令及结果、手工检查设备/浏览器、未通过项和 Owner 结论。阶段结束时列出 commit candidate；只有收到 Owner 的 commit/push 指令后才执行 Git 写操作。
 
@@ -707,11 +708,9 @@ stateDiagram-v2
 
 - [ ] Phase 2 视觉验收报告记录为 Pass；垂直切片可在 Mac/手机完成，报告能说明至少一个普通/严重错误和一个危险行为；普通动画与低动态模式均通过车道、远近、相对速度、gap、信号/标线和冲突关系检查；`npm run check` 与 `git diff --check` 通过。未通过不得进入 Phase 3。
 
-### Phase 3: Newmarket 15–20 分钟完整 MVP
+### Phase 3: 完整内容与教学验收
 
-**目标**: 先完成六类场景和完整教学闭环（3A），通过 Owner 教学验收后，再加入本地历史、恢复、设置和弱项重练（3B），避免教学逻辑与数据功能同时膨胀。
-
-#### Phase 3A: 完整内容与教学验收
+**目标**: 完成六类场景、Newmarket 15–20 分钟路线和完整教学闭环，通过 Owner 教学验收；本阶段不同时加入本地历史和恢复，避免教学逻辑与数据功能同时膨胀。
 
 **实现范围**:
 
@@ -744,7 +743,9 @@ stateDiagram-v2
 
 - [ ] Phase 3 教学验收报告记录为 Pass；Owner 已确认六类场景、动态参数、五段式反馈和危险后两条路径；`npm run check` 与 `git diff --check` 通过。未通过时只调整参数、rubric、严重等级、文案或流程，不通过修改训练总分或虚构官方通过线解决。
 
-#### Phase 3B: 本地数据、设置和弱项训练
+### Phase 4: 本地数据、设置和弱项训练
+
+**目标**: 在 Phase 3 教学逻辑锁定后，加入本地历史、恢复、设置、导出和弱项重练，验证数据可靠性且不改变既有评分结果。
 
 **实现范围**:
 
@@ -768,14 +769,14 @@ stateDiagram-v2
 
 - 自动化测试: repository CRUD、checkpoint debounce/恢复、版本不兼容只读、旧 findings 可读、偏好默认/冲突、弱项最近 10 次边界、存储拒绝/满额降级。
 - 手工 / workflow 验证: 刷新恢复运行中 attempt；完成后刷新报告/历史；改键并刷新；导出/删除/清空；两个标签页冲突；禁用 IndexedDB 后完成内存练习。
-- 回归检查: Phase 3A golden attempt 的 findings 不变，持久化前后深度相等。
+- 回归检查: Phase 3 golden attempt 的 findings 不变，持久化前后深度相等。
 - 失败 / 边界检查: segment/10 秒 checkpoint 写失败、finish 保存失败、route version 不可重放、刷新不能清除首次危险记录。
 
 **退出标准**:
 
-- [ ] 完整 MVP 功能就绪；`npm run check`、存储/恢复负向测试和 `git diff --check` 通过；Phase 3 验收报告已追加 3B 结果，且没有未解决的 P0/P1 数据丢失问题。
+- [ ] 完整 MVP 功能就绪；`npm run check`、存储/恢复负向测试和 `git diff --check` 通过；Phase 4 数据可靠性验收报告记录为 Pass，且没有未解决的 P0/P1 数据丢失问题。
 
-### Phase 4: 发布硬化与 1.0
+### Phase 5: 发布硬化与 1.0
 
 **目标**: 补齐 E2E、性能、无障碍、断网/降级和 Pages 发布验证，形成可公开使用的 1.0。
 
@@ -808,7 +809,7 @@ stateDiagram-v2
 
 **退出标准**:
 
-- [ ] `1.0.0-rc.1` 的 GitHub Actions 和 Owner 完整 smoke 均通过并记录为“RC 通过”；随后只做版本/发布说明变更至 `1.0.0`，重新运行 CI 并部署，在公开站点执行首页、版本、开始考试和历史读取的最终短 smoke；将 Phase 4 报告更新为最终 Pass 后，在该已验证 commit 创建 `v1.0.0` tag，并可选创建 GitHub Release。任一功能性改动都会使此前完整 smoke 失效，必须重新执行受影响路径；P0/P1 未清零不得发布。
+- [ ] `1.0.0-rc.1` 的 GitHub Actions 和 Owner 完整 smoke 均通过并记录为“RC 通过”；随后只做版本/发布说明变更至 `1.0.0`，重新运行 CI 并部署，在公开站点执行首页、版本、开始考试和历史读取的最终短 smoke；将 Phase 5 报告更新为最终 Pass 后，在该已验证 commit 创建 `v1.0.0` tag，并可选创建 GitHub Release。任一功能性改动都会使此前完整 smoke 失效，必须重新执行受影响路径；P0/P1 未清零不得发布。
 
 ### 整体验收
 
@@ -817,9 +818,9 @@ stateDiagram-v2
 | 静态/单元/构建 | 类型、lint、内容 schema、引擎、rubric、输入、报告和生产构建 | `npm run check` | Yes（所有阶段） |
 | 内容追溯 | 道路事实、Prompt、rubric、ID/引用、证据和版本 | `npm run validate:content`（Phase 1 起已纳入 check） | Yes |
 | 集成 / workflow | 内容包 → attempt → findings → 存储/恢复/重放 | Vitest 集成 fixtures | Yes（对应阶段） |
-| 端到端 | 首页、考点、短路线、危险分支、报告、历史和 Pages 子路径 | `npm run test:e2e` | Yes（Phase 4） |
+| 端到端 | 首页、考点、短路线、危险分支、报告、历史和 Pages 子路径 | `npm run test:e2e` | Yes（Phase 5） |
 | 浏览器/设备 | Chrome、Firefox、Safari、Mac 键鼠和手机触控/布局 | Playwright Chromium/WebKit + Owner 手工验收；Safari 以真实设备为准 | Yes（Phase 2 起按 gate） |
-| 无障碍/降级 | 键盘、焦点、字幕、对比、低动态、禁音、存储不可用 | Playwright + VoiceOver/手工清单 | Yes（Phase 4） |
+| 无障碍/降级 | 键盘、焦点、字幕、对比、低动态、禁音、存储不可用 | Playwright + VoiceOver/手工清单 | Yes（Phase 5） |
 | 回滚 / 兼容性 | 上一发布构建、旧 attempt/findings、schemaVersion | 上一 tag preview + migration fixtures | Yes（发布版） |
 
 **必要测试数据 / fixtures**:
@@ -851,7 +852,7 @@ stateDiagram-v2
 
 ## 8. 发布和回滚
 
-- 发布顺序: 各 Phase 实现/验证/Owner gate → Phase 4 将版本设为 `1.0.0-rc.1` → `npm run check && npm run test:e2e` → 合并/推送 `main` → GitHub Actions 部署 RC → Owner 在真实 Pages 完整 smoke → 报告记录“RC 通过” → 仅更新版本/发布说明至 `1.0.0` → CI/部署 → 最终短 smoke → 报告更新为最终 Pass → 在验证过的最终 commit 创建 `v1.0.0` tag。
+- 发布顺序: 各 Phase 实现/验证/Owner gate → Phase 5 将版本设为 `1.0.0-rc.1` → `npm run check && npm run test:e2e` → 合并/推送 `main` → GitHub Actions 部署 RC → Owner 在真实 Pages 完整 smoke → 报告记录“RC 通过” → 仅更新版本/发布说明至 `1.0.0` → CI/部署 → 最终短 smoke → 报告更新为最终 Pass → 在验证过的最终 commit 创建 `v1.0.0` tag。
 - Feature flag / 配置开关: `supportStatus` 控制考点；route manifest 控制路线；`features.practice/history/weakness` 可用构建期常量逐阶段开启，不使用远端 flag 服务。
 - 部署顺序: 静态代码和内容同一个不可分割的 commit；不得先发布引用不存在内容的 UI。
 - 发布期间监控: 查看 GitHub Actions；RC 完整 smoke 检查首页、Newmarket、完整考试、报告/历史、资源 404 和浏览器 console/network；最终版短 smoke 再确认版本、首页、开始考试及既有历史可读。
@@ -882,7 +883,7 @@ stateDiagram-v2
 - [x] 整体验收写清楚必须执行的命令或手工检查。
 - [x] 高风险决策标成“不确定时先问”。
 - [x] 非目标足够明确，能防止实现时扩大范围。
-- [x] Owner 已要求正式收口，设计状态已改为 `Locked`，v1.0 是实现基线。
+- [x] Owner 已要求正式收口，设计状态保持 `Locked`，v1.1 是当前实现基线。
 - [ ] 每个 Phase 开始前确认上一阶段退出标准和 commit。
 - [ ] 每次内容变更同步更新 evidence、checkedAt、contentVersion 和测试 fixture。
 - [ ] 每个 Owner gate 形成 `my-ai-brain/docs/test-reports/` 验收记录；未通过时不进入下一阶段。
@@ -890,11 +891,12 @@ stateDiagram-v2
 
 ## 11. Open Questions（已关闭）
 
-截至 v1.0 没有阻塞实现的开放问题。此前四项问题已被改写为第 7 节中的可执行 gate，并分别明确了交付物、自动化验证、Owner 手工验收、失败处理和退出标准：
+截至 v1.1 没有阻塞实现的开放问题。第 7 节的五个阶段 gate 已分别明确交付物、自动化验证、Owner 手工验收、失败处理和退出标准：
 
 - Phase 1：七字段 Newmarket 道路事实清单与 evidence 校验。
 - Phase 2：Mac/手机、普通/低动态模式的 SVG 视觉验收。
-- Phase 3A：六类参数化场景、五段式反馈和危险后继续练习的教学验收。
-- Phase 4：`1.0.0-rc.1` 公开 Pages 完整 smoke、正式版本短 smoke 和 `v1.0.0` 发布。
+- Phase 3：六类参数化场景、五段式反馈和危险后继续练习的教学验收。
+- Phase 4：本地历史、恢复、设置、导出和弱项训练的数据可靠性验收。
+- Phase 5：`1.0.0-rc.1` 公开 Pages 完整 smoke、正式版本短 smoke 和 `v1.0.0` 发布。
 
-这些 gate 是实现计划的一部分，不是待 Owner 现在补充答案的问题；每个 gate 到达时由 Agent 提供可运行产物和验收清单，Owner 只需基于实际结果接受或退回。任何新增的阻塞性问题都必须先以 v1.1+ 修订本文，不能在实现中静默改变 Locked 决策。
+这些 gate 是实现计划的一部分，不是待 Owner 现在补充答案的问题；每个 gate 到达时由 Agent 提供可运行产物和验收清单，Owner 只需基于实际结果接受或退回。任何新增的阻塞性问题都必须先以 v1.2+ 修订本文，不能在实现中静默改变 Locked 决策。
