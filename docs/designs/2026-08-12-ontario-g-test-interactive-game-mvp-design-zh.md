@@ -14,6 +14,7 @@
 | v0.2 | 2026-08-12 | nieyuanyuan | 明确 Phase 1 的 Newmarket 道路事实核验交付物、证据分级和 `authored` 教学抽象边界。 |
 | v0.3 | 2026-08-12 | nieyuanyuan | 明确 Phase 2 的 SVG 视觉验收对象、Mac/手机可判定标准，以及未通过时优先调整视觉编码而不扩大为实景或 3D。 |
 | v0.4 | 2026-08-12 | nieyuanyuan | 明确 Phase 3 的六类场景教学验收、反馈结构，以及危险记录不可被后续表现抵消的继续练习流程。 |
+| v0.5 | 2026-08-12 | nieyuanyuan | 明确 Phase 4 在公开 GitHub Pages 上的端到端 smoke test、手机与网络检查，以及通过后发布 `1.0.0` 的动作。 |
 
 ## 1. 摘要
 
@@ -674,6 +675,7 @@ stateDiagram-v2
 - [ ] 完成语义按钮、焦点、字幕、颜色对比、44×44 触控目标、`prefers-reduced-motion` 和文本替代。
 - [ ] 按场景/考点分包，控制首屏；验证已加载 attempt 断网可继续。是否增加 service worker 由实测决定，默认不加。
 - [ ] 完成隐私说明、内容来源/attribution、版本页和本地数据清除入口。
+- [ ] 准备公开站点 smoke test 清单和正式测试报告模板，覆盖 Newmarket 选择、Exam briefing、输入、指令/字幕、暂停恢复、危险事件、报告、历史和弱项重练。
 
 **数据 / migration 改动**:
 
@@ -681,20 +683,20 @@ stateDiagram-v2
 
 **Agent 执行约束**:
 
-- 必须遵守: Pages 发布前运行完整 check/E2E；网络面板确认无付费/遥测请求。
+- 必须遵守: Pages 发布前运行完整 check/E2E；部署后在公开地址 `https://nieyy.github.io/ontario-g-test/` 验证，不以本地预览或 GitHub Actions 绿色状态代替 Owner smoke test；网络面板确认无付费/遥测请求。
 - 禁止做: 为 PWA 或统计引入未评审第三方服务；忽略 GitHub Actions warning 导致未来部署不可用。
 - 不确定时先问: 需要新增外部运行时依赖、第三方字体/素材或改变隐私边界。
 
 **本阶段验证**:
 
 - 自动化测试: `npm run check`、`npm run validate:content`、`npm run test:e2e`。
-- 手工 / workflow 验证: Pages 真实 URL、刷新/hash 深链、断网、禁音、低动态、键盘-only、VoiceOver 基本流程。
+- 手工 / workflow 验证: Owner 在公开 Pages 完成一次 15–20 分钟端到端流程，覆盖 Newmarket → Exam briefing → Mac 键盘/鼠标 → 英文指令/字幕 → 暂停恢复 → 危险事件处理 → 完整报告 → 本地历史 → 一次弱项重练；在手机完成入口、考点选择和核心触控检查；另验证刷新/hash 深链、断网、禁音、低动态、键盘-only 和 VoiceOver 基本流程。
 - 回归检查: 同一 golden attempt 重放结果；旧 attempt 报告；构建产物无 key/地图/分析 SDK。
-- 失败 / 边界检查: 资源 404、内容 chunk 失败、浏览器存储不可用、无 SpeechSynthesis。
+- 失败 / 边界检查: 公开站点白屏、资源 404、内容 chunk 失败、浏览器存储不可用、无 SpeechSynthesis、手机浏览器栏遮挡操作、20 分钟运行后计时/指令/状态异常。
 
 **退出标准**:
 
-- [ ] GitHub Actions 成功部署，公开 URL 完成一次完整考试；不存在 P0/P1 可访问性、规则或数据丢失问题。
+- [ ] GitHub Actions 成功部署后，Owner 已在公开 Pages 完成上述 smoke test，不存在 P0/P1 可访问性、规则或数据丢失问题；网络面板无付费地图、分析或其他未声明运行时服务。测试结果保存到 `my-ai-brain/docs/test-reports/` 后，才可将应用版本改为 `1.0.0`、创建 `v1.0.0` tag，并可选创建 GitHub Release。任一核心步骤失败都必须修复、重新部署并复测。
 
 ### 整体验收
 
@@ -777,4 +779,4 @@ stateDiagram-v2
 - [ ] Phase 1 内容核验：建立 Newmarket 垂直切片道路事实清单。经官方、政府开放资料或合规道路数据核验的信息，可以使用真实道路名称和结构；无法核验的车道、坐标、限速、标线和信号时序必须省略，或标为不对应具体路口的 `authored` 教学抽象，不得宣称是现实路口或官方考试路线的精确复刻。该清单至少包含“场景、可使用的真实名称、已核验结构、未核验内容、证据来源、核验日期、证据等级”七项，并由 Owner 验收。
 - [ ] Phase 2 视觉验收：Agent 提供可在 Mac 和手机运行的 5–8 分钟垂直切片，由 Owner 验证玩家无需依赖复盘答案，即可从 SVG 场景辨认当前/目标车道、车辆远近与相对速度、安全/危险 gap、信号/标线以及潜在冲突关系。普通动画和低动态模式都必须可理解，安全与危险不能只靠颜色区分；未通过时先调整透视、车辆大小、运动线索、标线、HUD、箭头、数字或文本，不直接扩大为 Street View、实景素材或实时 3D。
 - [ ] Phase 3 教学验收：Agent 提供包含红灯右转、黄灯、多车道左转、高速并入、跟慢车和高速驶离的完整 Newmarket MVP，每类至少包含 3 个参数化变体。Owner 试玩并确认：正确判断会随速度、距离、车流、gap、信号和可停车条件合理变化；反馈按照“情境—动作—影响—改进—依据”组织，语气具体、克制且不冒充 DriveTest 官方结论；首次危险行为永久保留在当前 attempt 中，用户可选择立即复盘，或在明确标记为继续练习的状态下完成剩余路线，后续表现不能抵消危险记录。未通过时调整参数、rubric、严重等级、文案或流程，不通过修改训练总分或虚构官方通过线解决。
-- [ ] Phase 4 发布验收：Owner 完成公开 Pages 站点的一次 15–20 分钟 smoke test，再将产品标为 1.0。
+- [ ] Phase 4 发布验收：GitHub Actions 部署成功后，Owner 必须在公开地址 `https://nieyy.github.io/ontario-g-test/` 完成一次 15–20 分钟端到端 smoke test，覆盖 Newmarket 选择、Exam briefing、Mac 键盘/鼠标操作、英文指令与字幕、暂停恢复、危险事件处理、完整报告、本地历史和一次弱项重练，并在手机完成入口、考点选择及核心触控检查；同时确认资源无 404，运行时不请求付费地图、分析或其他未声明服务。任何核心步骤失败都必须修复、重新部署并复测；全部通过并将正式测试报告保存到 `my-ai-brain/docs/test-reports/` 后，才能将应用版本标为 `1.0.0`、创建 `v1.0.0` tag，并可选创建 GitHub Release。
