@@ -11,6 +11,7 @@
 | 版本 | 日期 | 作者 | 摘要 |
 |---|---|---|---|
 | v0.1 | 2026-08-12 | nieyuanyuan | 初版设计：锁定产品流程、模块边界、确定性场景引擎、内容契约、评分复盘、本地存储、分阶段实现与验收标准。 |
+| v0.2 | 2026-08-12 | nieyuanyuan | 明确 Phase 1 的 Newmarket 道路事实核验交付物、证据分级和 `authored` 教学抽象边界。 |
 
 ## 1. 摘要
 
@@ -565,28 +566,30 @@ stateDiagram-v2
 - [ ] 新建 `src/features/centre-select/`、`mode-select/`、`briefing/`，实现首页 → Newmarket → Exam/Practice → briefing。
 - [ ] 新建 `scripts/validate-content.ts` 和 `npm run validate:content`；纳入 `npm run check`。
 - [ ] 加入来源日期、非官方路线、训练不替代真实驾驶、Newmarket 教学限制提示。
+- [ ] 建立 Newmarket 垂直切片道路事实清单，逐项记录场景、可使用的真实道路名称、已核验结构、未核验细节、来源、`checkedAt` 和 `EvidenceLevel`。
 
 **数据 / migration 改动**:
 
 - [ ] `CentrePack` schemaVersion=1；Newmarket contentVersion=`newmarket-2026.08.1`。
 - [ ] 首批受控 Prompt、RuleSource 和六类场景的空壳/参数边界；不得先填未核验道路事实。
+- [ ] 只有经官方、政府开放资料或合规道路数据核验的事实，才能写成现实道路属性；证据不足的车道、坐标、限速、标线和信号时序必须省略，或作为不对应具体路口的 `authored` 教学参数保存。
 
 **Agent 执行约束**:
 
-- 必须遵守: `available` 只能是 Newmarket；所有路线绑定 `centreId`；来源与教学内容分离。
+- 必须遵守: `available` 只能是 Newmarket；所有路线绑定 `centreId`；来源与教学内容分离；`authored` 表示根据 Ontario G Test 规则设计的教学情境，不表示现实道路的精确复制。
 - 禁止做: 抓取/嵌入 Google 内容、运行时抓 DriveTest、把社区路线命名为官方路线。
-- 不确定时先问: 某道路事实缺少允许使用的来源，或需要把未核验坐标/限速写入可发布内容。
+- 不确定时先问: 某项现实道路属性是否已有足够证据，或者某个教学参数是否会让用户误以为它对应真实路口；不得用 Google 地图印象或个人记忆补写事实。
 
 **本阶段验证**:
 
-- 自动化测试: ID 唯一、引用完整、状态可进入性、日期/URL 格式、参数范围、禁用中心不可开始。
-- 手工 / workflow 验证: 桌面/手机选择 Newmarket；其他考点提示但不可点击；刷新 hash 页面不 404。
+- 自动化测试: ID 唯一、引用完整、状态可进入性、日期/URL 格式、参数范围、禁用中心不可开始；带现实道路属性的记录必须有来源和核验日期，`authored` 场景不得使用 `official` 文案。
+- 手工 / workflow 验证: Owner 审阅道路事实清单；桌面/手机选择 Newmarket；其他考点提示但不可点击；刷新 hash 页面不 404。
 - 回归检查: 现有首页免责声明和 Pages base path 保留。
 - 失败 / 边界检查: manifest 缺字段、route 引用不存在、`planned` 被错误启用时测试失败。
 
 **退出标准**:
 
-- [ ] 内容校验和 `npm run check` 通过；用户能到 briefing，但 Start 明确显示垂直切片尚未实现。
+- [ ] Newmarket 道路事实清单已由 Owner 确认，所有事实都有可追溯证据或明确标为 `authored` 教学抽象；内容校验和 `npm run check` 通过；用户能到 briefing，但 Start 明确显示垂直切片尚未实现。
 
 ### Phase 2: 5–8 分钟确定性垂直切片
 
@@ -764,9 +767,9 @@ stateDiagram-v2
 
 ## 11. Open Questions
 
-当前没有阻塞架构实现的开放问题。以下是 Phase gate，不允许 Agent 自行猜测：
+当前没有阻塞架构实现的开放问题。以下是已定义交付物的 Phase gate，不是要求 Owner 预先提供额外道路资料；Agent 必须完成相应核验并提交 Owner 验收，不能自行猜测：
 
-- [ ] Phase 1 内容核验：确定 Newmarket 垂直切片采用哪些可发布道路结构事实；证据不足时标为 `authored` 教学场景，不补写未验证坐标或限速。
+- [ ] Phase 1 内容核验：建立 Newmarket 垂直切片道路事实清单。经官方、政府开放资料或合规道路数据核验的信息，可以使用真实道路名称和结构；无法核验的车道、坐标、限速、标线和信号时序必须省略，或标为不对应具体路口的 `authored` 教学抽象，不得宣称是现实路口或官方考试路线的精确复刻。该清单至少包含“场景、可使用的真实名称、已核验结构、未核验内容、证据来源、核验日期、证据等级”七项，并由 Owner 验收。
 - [ ] Phase 2 视觉验收：Owner 确认 SVG 对车道、gap、车速和冲突关系的表达在 Mac 与手机上足够清楚。
 - [ ] Phase 3 教学验收：Owner 确认六类场景的参数、反馈语气和“危险后继续练完”流程符合备考目标。
 - [ ] Phase 4 发布验收：Owner 完成公开 Pages 站点的一次 15–20 分钟 smoke test，再将产品标为 1.0。
