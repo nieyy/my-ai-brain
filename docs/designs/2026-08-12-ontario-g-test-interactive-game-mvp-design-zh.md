@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-12
 **Owner**: nieyuanyuan
-**状态**: Draft
+**状态**: Locked
 **源项目 / 分支**: `nieyy/ontario-g-test / main @ 4a3923a`
 **相关调研 / 代码讲解 / review**: [Ontario G Test 真实路况互动驾驶游戏调研 v1.1](../research/2026-08-12-ontario-g-test-interactive-driving-game-research-zh.md)
 
@@ -15,6 +15,7 @@
 | v0.3 | 2026-08-12 | nieyuanyuan | 明确 Phase 2 的 SVG 视觉验收对象、Mac/手机可判定标准，以及未通过时优先调整视觉编码而不扩大为实景或 3D。 |
 | v0.4 | 2026-08-12 | nieyuanyuan | 明确 Phase 3 的六类场景教学验收、反馈结构，以及危险记录不可被后续表现抵消的继续练习流程。 |
 | v0.5 | 2026-08-12 | nieyuanyuan | 明确 Phase 4 在公开 GitHub Pages 上的端到端 smoke test、手机与网络检查，以及通过后发布 `1.0.0` 的动作。 |
+| v1.0 | 2026-08-12 | nieyuanyuan | 正式版收口：修正反馈与继续练习状态契约，拆分 Phase 3 教学完成和本地数据里程碑，明确逐阶段交付证据、CI/E2E 命令与 release candidate 发布顺序，关闭开放问题。 |
 
 ## 1. 摘要
 
@@ -22,6 +23,7 @@
 - 选择的方向: 在纯静态 React/Vite 应用中，以 Newmarket 为首个 `CentrePack`，使用 SVG 2.5D 第一视角场景、固定步长的确定性事件引擎、统一输入事件、规则评分器和本地事件记录实现考试、练习、复盘三种模式。
 - 预期结果: 用户可先选择 Newmarket，完成一场 15–20 分钟的模拟考试，听到常见英文考官指令，通过鼠标、触摸或 Mac 键盘完成观察、信号、速度、车道和 gap 决策，并得到按事件时间线组织的前三项改进建议和弱项短练习。
 - AI Agent 应该能根据本文直接实现什么: 按第 7 节四个阶段，在 `/Users/nieyuanyuan/Desktop/ccproj/nieyy/ontario-g-test` 中建立内容包、播放器、输入/计时/评分状态机、本地存储、报告和完整 Newmarket MVP，不需要临时决定产品边界或核心数据模型。
+- 实现起点: `nieyy/ontario-g-test` 的 `main @ 4a3923a`；后续若实现起点发生变化，先核对本设计第 3 节和实际 diff，不重新解释已锁定的产品边界。
 
 ## 2. 背景和目标
 
@@ -215,6 +217,7 @@ e2e/
 
 ```ts
 type SupportStatus = 'available' | 'planned' | 'retired'
+type RouteStatus = 'preview' | 'playable' | 'retired'
 type EvidenceLevel =
   | 'official-rule'
   | 'municipal-boundary'
@@ -245,6 +248,7 @@ interface RouteDefinition {
   id: string
   centreId: string
   contentVersion: string
+  status: RouteStatus
   title: string
   evidence: EvidenceRef[]
   estimatedDurationSeconds: number
@@ -261,6 +265,21 @@ interface SegmentDefinition {
   completion: CompletionCondition
 }
 
+interface RoadFacts {
+  roadNames: string[]
+  topology: 'straight' | 'signalized-intersection' | 'multi-lane-turn' |
+    'freeway-merge' | 'freeway-mainline' | 'freeway-exit'
+  lanes?: { sameDirection: number; opposingDirection: number }
+  speedLimitKph?: number
+  signs: string[]
+  evidenceRefs: string[]
+}
+
+type CompletionCondition =
+  | { type: 'elapsed-ms'; value: number }
+  | { type: 'distance-m'; value: number }
+  | { type: 'world-event'; event: string }
+
 interface ScenarioDefinition<P = Record<string, unknown>> {
   id: string
   kind: 'commercial-road' | 'signalized-intersection' |
@@ -268,6 +287,12 @@ interface ScenarioDefinition<P = Record<string, unknown>> {
   parameters: P
   rubricIds: string[]
   variants: ScenarioVariant<P>[]
+}
+
+interface ScenarioVariant<P> {
+  id: string
+  weight: number
+  parameters: P
 }
 
 interface EvidenceRef {
@@ -296,15 +321,24 @@ interface RubricDefinition {
   evidenceRefs: string[]
   feedback: {
     situationTemplate: string
-    expectedTemplate: string
+    impactTemplate: string
+    improvementTemplate: string
   }
 }
+
+type RubricEvaluatorId =
+  | 'complete-stop-before-right-turn'
+  | 'yellow-light-decision'
+  | 'multi-lane-turn-continuity'
+  | 'freeway-merge-safety'
+  | 'freeway-following-decision'
+  | 'freeway-exit-sequence'
 ```
 
 内容规则：
 
 - 所有跨文件 ID 唯一且可解析；`route.centreId` 必须与内容包一致。
-- `available` 中心至少有一条可完成路线；`planned/retired` 永远不能开始 attempt。
+- `available` 中心可以进入详情页；只有引用至少一条 `playable` 路线时才可开始 attempt。`preview` 只用于 Phase 1 briefing/内容预览，`planned/retired` 中心和 `retired` 路线永远不能开始 attempt。
 - 证据引用包含 `level`、`url`、`checkedAt`、`note`；不能使用 `official` 描述社区路线。
 - 参数范围在构建时验证，例如速度非负、gap 大于 0、灯色时序有序、路线时长处于允许范围。
 - 运行时不访问 `sourceUrl`；来源只用于维护、免责声明和内容审查。
@@ -336,9 +370,18 @@ interface AttemptRecord {
   completedAt?: string
   status: AttemptStatus
   firstDangerAtMs?: number
+  continuedForPracticeAtMs?: number
   actions: ActionEvent[]
   findings: Finding[]
   summary?: AttemptSummary
+}
+
+interface AttemptSummary {
+  result: 'completed' | 'dangerous-event' | 'aborted'
+  topFindingIds: string[]
+  repeatedRubricIds: string[]
+  repeatedDimensions: Finding['dimension'][]
+  findingCountByDimension: Partial<Record<Finding['dimension'], number>>
 }
 
 interface ActionEvent {
@@ -365,6 +408,7 @@ interface ActionEvent {
 ```ts
 interface EngineState {
   attemptStatus: AttemptStatus
+  runStage: 'exam' | 'practice' | 'continued-practice'
   simulationMs: number
   segmentIndex: number
   world: WorldState
@@ -392,7 +436,8 @@ interface Finding {
   segmentId: string
   situation: string
   action: string
-  expected: string
+  impact: string
+  improvement: string
   evidenceRefs: string[]
 }
 ```
@@ -401,9 +446,11 @@ interface Finding {
 - 随机参数只从 attempt 的 seed 派生，禁止在场景中直接调用 `Math.random()`。
 - 暂停、页面隐藏和 `danger-review` 状态不推进 `simulationMs`。
 - Rubric 只读取世界事实和时间窗口内事件，不读取 DOM、CSS 动画或真实墙钟。
-- `dangerous` 首次出现时写入 `firstDangerAtMs` 并进入 `danger-review`；选择继续只恢复练习，不清除失败事实。
+- `impact` 必须区分已发生后果和风险：只有世界状态记录了其他车辆减速/避让时才能写“导致后车减速/避让”；否则写成“在该速度差下会增加冲突风险”，不得为了增强反馈而虚构后果。
+- Exam 中首次出现 `dangerous` 时写入 `firstDangerAtMs` 并进入 `danger-review`；选择继续时同时写入 `continuedForPracticeAtMs`、将 `runStage` 改为 `continued-practice`，不清除危险事实。Practice 中的危险 finding 使用练习反馈/重做流程，不写成模拟考试失败。
 - 报告不显示官方分数。首页结果只显示“完成”“因危险事件结束”或“标记危险后继续完成”，再展示五维问题数量和前三项优先改进。
 - Top 3 排序分：`minor=1`、`serious=3`、`dangerous=8`；同一 rubric 重复出现每次额外 `+1`，同分按首次发生时间排序。该分值只用于报告排序，不对用户显示。
+- 普通错误累计不产生“官方未通过”结论。报告透明标记重复模式：同一 rubric 出现至少 2 次，或同一 dimension 出现至少 3 次时列为“反复出现，优先练习”；这条路径与危险事件标记彼此独立。
 - 弱项列表从最近 10 个已完成 attempt 的已保存 findings 计算，不修改公共内容或规则。
 
 #### 存储和版本
@@ -413,6 +460,7 @@ interface Finding {
   - `attempts`, key `id`，索引 `completedAt`、`centreId`、`routeId`。
   - `checkpoints`, key `attemptId`，仅保存运行中恢复点；完成/放弃后删除。
 - attempt 保存不可变的 `contentVersion`、`engineVersion`、seed、actions 和 findings。内容升级后旧报告直接读取已保存 findings；只有版本仍可用时才允许完整重放。
+- checkpoint 在每个 segment 边界、页面隐藏前和每 10 秒模拟时间最多写入一次；写入必须 debounce。恢复时优先校验版本并重放 checkpoint 后的动作，不能用不兼容内容强行恢复。
 - MVP 无需从旧系统迁移数据；未来 schema 升级必须提供纯函数 migration 和 fixture。
 - 本地存储不可用时显示非阻塞提示，当前 attempt 保留在内存；结束时允许下载去身份化 JSON，不能声称已保存历史。
 
@@ -481,8 +529,8 @@ type AppError =
 | 开始考试 | 模式页 | 选择 Exam → 创建 seed/id → 输入检查 → 用户点击开启语音 → briefing | attempt 进入 `running`，计时从 0 开始 |
 | 考试推进 | `AttemptPlayer` | 固定 tick → 处理事件 → 更新世界 → rubric 评估 → 生成 SceneFrame | 画面、字幕、语音、报告事实来自同一状态 |
 | 练习推进 | Practice | 同一引擎，但允许暂停、查看提示和重做当前场景 | 重做生成新 variant/seed，并标记为练习，不污染考试结果 |
-| 危险事件 | evaluator 输出 `dangerous` | 记录首次时间 → 暂停 → 用户选择结束或继续 | 不论选择，危险事实都保留；继续后不再重复弹同一事件 |
-| 完成与复盘 | 路线完成/主动结束 | 固化 record → 生成 Top 3 → 保存 IndexedDB → 报告 | 可查看情境、动作、正确依据和对应规则来源 |
+| 危险事件 | Exam evaluator 输出 `dangerous` | 记录首次时间 → 暂停 → 用户选择结束或继续 | 不论选择，危险事实都保留；继续后 `runStage=continued-practice`，不再为同一 finding 重复弹窗 |
+| 完成与复盘 | 路线完成/主动结束 | 固化 record → 识别重复模式/Top 3 → 保存 IndexedDB → 报告 | 可查看情境、动作、影响、改进方法和对应规则来源 |
 | 弱项重练 | 报告“只练这一类” | rubricId → 过滤支持场景 → 新 seed/variant → Practice | 相同规则、不同交通参数的 2–5 分钟短练习 |
 | 切换后台 | `visibilitychange=hidden` | 派发 system pause → 停止 speech → 不推进模拟 | 返回后显式继续，不发生后台追帧 |
 
@@ -491,18 +539,22 @@ type AppError =
 ```mermaid
 stateDiagram-v2
   [*] --> Briefing
-  Briefing --> Running: Start
-  Running --> Paused: User pause / page hidden
-  Paused --> Running: Resume
-  Running --> DangerReview: Dangerous finding
-  DangerReview --> Running: Continue practice
+  Briefing --> Active: Start / set runStage
+  state Active {
+    [*] --> Playing
+    Playing --> Paused: User pause / page hidden
+    Paused --> Playing: Resume
+  }
+  Active --> DangerReview: Dangerous finding while runStage=exam
+  DangerReview --> Active: Continue / runStage=continued-practice
   DangerReview --> Completed: End attempt
-  Running --> Completed: Route complete
-  Running --> Aborted: Exit confirmed
-  Paused --> Aborted: Exit confirmed
+  Active --> Completed: Route complete
+  Active --> Aborted: Exit confirmed
   Completed --> [*]
   Aborted --> [*]
 ```
+
+`attemptStatus` 管理生命周期，`runStage` 管理当前教学语境；暂停/恢复不得把 `continued-practice` 错误恢复成 `exam`。Practice 初始即为 `runStage=practice`，其危险 finding 可触发练习提示或重做，但不进入 Exam 的 `DangerReview` 结果路径。
 
 #### 默认输入映射
 
@@ -526,7 +578,7 @@ stateDiagram-v2
 - 重试 / 超时行为:
   - 本地内容加载最多自动重试一次；仍失败则要求刷新，不做无限循环。
   - speech 不重试旧指令，避免语音排队晚于场景；字幕始终是事实来源。
-  - 持久化失败不循环重试；每个 segment 结束和 attempt 结束各尝试一次。
+  - checkpoint 按“每 10 秒模拟时间、segment 边界、页面隐藏前”的策略调度；单次失败不立即循环重试，只在下一调度点再尝试。attempt 结束保存只执行一次，失败则保留内存报告和导出入口。
 - 部分失败行为:
   - 画面渲染异常时暂停 attempt 并允许切换静态模式，不在不可见场景中继续扣分。
   - 报告保存失败仍能在当前内存查看和导出。
@@ -536,6 +588,8 @@ stateDiagram-v2
 - 幂等性:
   - Finding ID 由 `attemptId + rubricId + segmentId + occurrence` 生成，重复 tick 不得生成重复 finding。
   - `finish()` 和 attempt 保存是幂等操作；重复调用返回同一已固化结果。
+- 长帧处理:
+  - `advance(deltaMs)` 把墙钟增量累积后按 100 ms 步长消费，单次渲染最多推进 1 秒；超过部分保留 backlog。页面隐藏、系统休眠或 backlog 超过 2 秒时自动暂停并要求用户显式继续，避免“追帧”穿过决策窗口。
 
 ### 6.6 可观测性和运维
 
@@ -556,25 +610,47 @@ stateDiagram-v2
 
 ## 7. 分阶段实现与验证计划
 
-> 每个 Phase 单独提交并在退出标准满足后停下。不得为了“顺手完成”跨阶段加入地图、后端、真实 3D、第二考点或未设计功能。
+> 四个 Phase 必须按顺序执行；Phase 3 内含 3A/3B 两个串行里程碑。每个 Phase 或里程碑都要同时交付实现、自动化验证和可审阅证据，并在 Owner gate 停下。不得为了“顺手完成”跨阶段加入地图、后端、真实 3D、第二考点或未设计功能。
+
+### 阶段依赖与交付证据
+
+| 阶段 | 前置条件 | 主要可运行产物 | 阶段 gate | 验收记录 |
+|---|---|---|---|---|
+| Phase 1 | `main @ 4a3923a`，本设计已 Locked | 考点/内容契约、Newmarket 预览入口、道路事实清单 | Owner 内容核验 | `my-ai-brain/docs/test-reports/<date>-ontario-g-test-phase-1-content-validation-zh.md` |
+| Phase 2 | Phase 1 内容 gate 通过 | 5–8 分钟内存态垂直切片 | Owner Mac/手机视觉验收 | `...phase-2-visual-acceptance-zh.md` |
+| Phase 3A | Phase 2 视觉 gate 通过 | 六类场景、15–20 分钟完整路线、考试/练习/复盘 | Owner 教学验收 | `...phase-3-teaching-acceptance-zh.md` |
+| Phase 3B | Phase 3A 教学 gate 通过 | 本地历史、恢复、设置、弱项训练和导出 | 功能与数据可靠性 gate | 同一 Phase 3 报告追加结果 |
+| Phase 4 | Phase 3B 退出标准通过 | 发布候选、E2E/无障碍/性能硬化、公开 1.0 | Owner Pages 发布验收 | `...phase-4-release-acceptance-zh.md` |
+
+文件名中的 `<date>` 使用实际验收日期。每份报告至少记录实现 commit、内容/engine version、执行命令及结果、手工检查设备/浏览器、未通过项和 Owner 结论。阶段结束时列出 commit candidate；只有收到 Owner 的 commit/push 指令后才执行 Git 写操作。
+
+### 所有阶段共同约束
+
+- 开始前读取实现仓库 `AGENTS.md`、确认工作树和基线；保留用户已有改动，不混入无关重构或依赖升级。
+- 实现与测试同一阶段完成；任何新增脚本必须先写入 `package.json`，文档不得要求不存在的命令。
+- 每阶段至少执行当时已经存在的 `npm run check` 和 `git diff --check`；失败不得用 `--force`、跳过测试或放宽类型/规则绕过。
+- Owner gate 未通过时只修复本阶段问题并复验；不得先实现下一阶段来掩盖缺口。
+- 道路事实、rubric、Prompt 或 schema 变化必须同步更新 evidence、`checkedAt`、`contentVersion` 和 fixtures。
+- 缺陷等级统一为：P0（错误规则可能教出危险行为、核心流程完全不可用、隐私泄露或不可恢复数据破坏）、P1（任一必需场景/输入方式/目标平台不可完成，评分/恢复明显错误）、P2（存在可用替代路径的体验或非关键兼容问题）。阶段 gate 不得遗留 P0/P1。
 
 ### Phase 1: 内容契约与产品入口
 
-**目标**: 建立可扩展的考点/路线/场景内容边界，让 Newmarket 可从首页进入模式选择，但暂不启动实时模拟。
+**目标**: 建立可扩展的考点/路线/场景内容边界和可审计的 Newmarket 道路事实清单；用户可以进入 Newmarket briefing，但尚不能开始实时模拟。
 
 **实现范围**:
 
-- [ ] 新建 `src/content/schema.ts`、`registry.ts`、`prompts/`、`rules/` 和 `centres/newmarket/`。
-- [ ] 将 `src/domain/centres.ts` 迁移为完整 `CentreProfile`，建立 `CentrePackManifest`、Route/Segment/Scenario/Rubric 类型守卫。
+- [ ] 新建 `src/content/schema.ts`、`registry.ts`、`prompts/`、`rules/`、`centres/newmarket/` 和对应 `*.test.ts`。
+- [ ] 将 `src/domain/centres.ts` 迁移为完整 `CentreProfile`，建立 `CentrePackManifest`、Route/Segment/Scenario/Rubric 的 TypeScript 类型、运行时 type guard 和语义校验。
 - [ ] 新建 `src/features/centre-select/`、`mode-select/`、`briefing/`，实现首页 → Newmarket → Exam/Practice → briefing。
-- [ ] 新建 `scripts/validate-content.ts` 和 `npm run validate:content`；纳入 `npm run check`。
+- [ ] 新建 `scripts/validate-content.ts`，增加直接 devDependency `tsx`，在 `package.json` 添加 `"validate:content": "tsx scripts/validate-content.ts"`，并将其置于 `npm run check` 的 lint 之后、单测/构建之前；不得依赖未声明的传递依赖执行脚本。
 - [ ] 加入来源日期、非官方路线、训练不替代真实驾驶、Newmarket 教学限制提示。
-- [ ] 建立 Newmarket 垂直切片道路事实清单，逐项记录场景、可使用的真实道路名称、已核验结构、未核验细节、来源、`checkedAt` 和 `EvidenceLevel`。
+- [ ] 在 `src/content/centres/newmarket/road-facts.ts` 建立机器可校验的道路事实清单，逐项记录场景、可使用的真实道路名称、已核验结构、未核验细节、来源、`checkedAt` 和 `EvidenceLevel`。
+- [ ] 建立 `newmarket-g-slice-v1` 的 `preview` route，只用于展示拟覆盖道路类型；无 `playable` route 时 Start 保持禁用并说明下一阶段交付。
 
 **数据 / migration 改动**:
 
 - [ ] `CentrePack` schemaVersion=1；Newmarket contentVersion=`newmarket-2026.08.1`。
-- [ ] 首批受控 Prompt、RuleSource 和六类场景的空壳/参数边界；不得先填未核验道路事实。
+- [ ] 建立首批受控 Prompt/RuleSource；只为 Phase 2 垂直切片建立 preview Segment/Scenario 引用，不创建没有语义或证据的六类空壳数据。
 - [ ] 只有经官方、政府开放资料或合规道路数据核验的事实，才能写成现实道路属性；证据不足的车道、坐标、限速、标线和信号时序必须省略，或作为不对应具体路口的 `authored` 教学参数保存。
 
 **Agent 执行约束**:
@@ -585,18 +661,18 @@ stateDiagram-v2
 
 **本阶段验证**:
 
-- 自动化测试: ID 唯一、引用完整、状态可进入性、日期/URL 格式、参数范围、禁用中心不可开始；带现实道路属性的记录必须有来源和核验日期，`authored` 场景不得使用 `official` 文案。
-- 手工 / workflow 验证: Owner 审阅道路事实清单；桌面/手机选择 Newmarket；其他考点提示但不可点击；刷新 hash 页面不 404。
+- 自动化测试: `npm run validate:content && npm run test && npm run build`；覆盖 ID 唯一、引用完整、日期/URL 格式、参数范围、`preview` 不可开始、`planned/retired` 不可开始、现实道路属性必须有来源/日期、`authored` 禁用官方路线文案。
+- 手工 / workflow 验证: Owner 对照七字段清单逐项接受/退回；桌面/手机选择 Newmarket；其他考点不可误入；`#/centre/newmarket` 刷新不 404；Start 禁用原因清楚。
 - 回归检查: 现有首页免责声明和 Pages base path 保留。
-- 失败 / 边界检查: manifest 缺字段、route 引用不存在、`planned` 被错误启用时测试失败。
+- 失败 / 边界检查: manifest 缺字段、route 引用不存在、未知 evaluator、`preview/planned` 被错误启动、来源缺失时测试失败。
 
 **退出标准**:
 
-- [ ] Newmarket 道路事实清单已由 Owner 确认，所有事实都有可追溯证据或明确标为 `authored` 教学抽象；内容校验和 `npm run check` 通过；用户能到 briefing，但 Start 明确显示垂直切片尚未实现。
+- [ ] Phase 1 验收报告记录为 Pass；道路事实清单已由 Owner 确认，所有现实事实可追溯或明确标为 `authored`；`npm run check` 与 `git diff --check` 通过；preview route 不能创建 attempt。
 
 ### Phase 2: 5–8 分钟确定性垂直切片
 
-**目标**: 用“商业道路 → 信号路口/多车道转弯 → Highway 404 并入”验证实时输入、场景、指令、评分和报告闭环。
+**目标**: 将 `newmarket-g-slice-v1` 升为 5–8 分钟 `playable` route，用“商业道路 → 信号路口/多车道转弯 → Highway 404 风格并入”验证输入、时钟、场景、指令、评分、复盘和 SVG 视觉表达的闭环；仍不实现持久化历史。
 
 **实现范围**:
 
@@ -606,11 +682,13 @@ stateDiagram-v2
 - [ ] 新建键盘/鼠标/触摸 InputAdapter；实现加速、刹车、信号、镜检、肩检和车道请求。
 - [ ] 新建 `services/speech/`，实现受控英文语音、英文字幕和可关闭中文字幕。
 - [ ] 新建 `features/report/`，显示前三项、五维 findings 和事件时间线；先以内存 attempt 工作。
+- [ ] 增加仅在 `?debug=1` 可见的场景调试入口，可用固定 `scenarioId/variantId/seed` 直接进入场景；不得改变生产评分逻辑。
 
 **数据 / migration 改动**:
 
 - [ ] `AttemptRecord`、`ActionEvent`、`Finding` schemaVersion=1。
-- [ ] 至少两个参数化 rubric：红灯右转/多车道转弯中的一个，以及高速并入组合判断。
+- [ ] 至少两个参数化 rubric：多车道转弯（或红灯右转）和高速并入组合判断；每个都包含正确、普通/严重错误和边界 fixture。
+- [ ] `newmarket-g-slice-v1.status` 从 `preview` 改为 `playable`；estimated duration 为 300–480 秒。
 
 **Agent 执行约束**:
 
@@ -620,18 +698,20 @@ stateDiagram-v2
 
 **本阶段验证**:
 
-- 自动化测试: 同 seed/action 重放一致；暂停不推进；prompt 只触发一次；危险 finding 去重；并入同时检查速度、空间和观察。
+- 自动化测试: `npm run check`；覆盖同 seed/action 重放 100 次一致、不同 `deltaMs` 得到相同结果、暂停/后台/长帧不追帧、prompt 只触发一次、输入边沿归一化、危险 finding 去重、并入同时检查速度/空间/观察。
 - 手工 / workflow 验证: 键盘、鼠标、触摸各完成一次；禁音仍有字幕；Owner 分别在 Mac 和手机完成垂直切片，无需依赖复盘答案即可辨认当前/目标车道、车辆远近与相对速度、安全/危险 gap、信号/标线及潜在冲突关系；低动态模式仍能理解同一情境并完成操作。
 - 回归检查: 页面隐藏自动暂停；恢复不追帧；base path 资源正常。
 - 失败 / 边界检查: 连点肩检、按键失焦未释放、拒绝所有 gap、内容加载失败、语音不可用。
 
 **退出标准**:
 
-- [ ] 5–8 分钟垂直切片可在 Mac 和手机完成，报告可准确说明至少一个普通错误和一个危险行为；Owner 已逐项确认当前/目标车道、远近、相对速度、gap、信号/标线和冲突关系在普通动画及低动态模式中均可理解。若未通过，先调整透视、车辆大小、运动线索、标线、HUD、箭头、数字或文本表达，再重新验收，不进入 Phase 3。
+- [ ] Phase 2 视觉验收报告记录为 Pass；垂直切片可在 Mac/手机完成，报告能说明至少一个普通/严重错误和一个危险行为；普通动画与低动态模式均通过车道、远近、相对速度、gap、信号/标线和冲突关系检查；`npm run check` 与 `git diff --check` 通过。未通过不得进入 Phase 3。
 
 ### Phase 3: Newmarket 15–20 分钟完整 MVP
 
-**目标**: 扩充为包含六类高价值场景、考试/练习/复盘、历史和弱项重练的完整 Newmarket 产品。
+**目标**: 先完成六类场景和完整教学闭环（3A），通过 Owner 教学验收后，再加入本地历史、恢复、设置和弱项重练（3B），避免教学逻辑与数据功能同时膨胀。
+
+#### Phase 3A: 完整内容与教学验收
 
 **实现范围**:
 
@@ -640,30 +720,60 @@ stateDiagram-v2
 - [ ] 完成 Newmarket 道路内容核验、道路模板参数和 15–20 分钟 authored/community-informed 路线；保留证据等级。
 - [ ] 完成 Exam 与 Practice 行为差异和短场景重做；首次危险行为发生后暂停，提供 `End and review` 与 `Continue for practice`，后者必须明确切换到继续练习状态。
 - [ ] 报告反馈统一采用“情境—玩家动作—对其他道路使用者的影响—下次改进—规则依据”结构，语气具体、克制、不羞辱用户，也不冒充 DriveTest 官方结论。
-- [ ] 新建 `services/storage/`、`features/history/`、`settings/`，实现 IndexedDB、偏好、改键、清除/导出。
-- [ ] 实现最近 10 次 attempt 弱项聚合和“只练这一类”。
+- [ ] 完成可在内存中运行的 Exam/Practice/Report 全流程；本里程碑不实现历史、恢复、改键持久化或弱项聚合。
 
 **数据 / migration 改动**:
 
-- [ ] IndexedDB version 1：`attempts` 和 `checkpoints`；localStorage preferences v1。
-- [ ] attempt 持久化 content/engine version、seed、actions、findings 和 summary；`firstDangerAtMs` 及首次危险 finding 一经写入不可被重做、继续练习或后续正确操作删除。
+- [ ] 完成 `continuedForPracticeAtMs`、`runStage`、五段式 Finding 和重复模式 summary；更新 golden fixtures 和 engine/content version。
+- [ ] 完整 route estimated duration 为 900–1200 秒；每次 route 至少覆盖六类场景各一次，每类场景库至少有 3 个可由 seed 选择的有效变体。
 
 **Agent 执行约束**:
 
 - 必须遵守: 每个结论包含时间/位置、情境、动作、影响、改进和依据；内容变化提升 contentVersion；危险后继续时，报告必须区分危险事件前的考试记录和之后的继续练习记录。
 - 禁止做: 将个人失败历史写入公开用户资料；默认启用遥测；为了完整路线编造道路事实；用后续正确操作抵消危险记录；用训练总分、虚构通过线或预计通过率掩盖教学问题。
-- 不确定时先问: 路线证据冲突、官方规则不能支持 rubric、需要改变已发布 attempt schema。
+- 不确定时先问: 路线证据冲突、官方规则不能支持 rubric、动态阈值会把规则教成死规则、需要改变已发布 attempt schema。
 
 **本阶段验证**:
 
-- 自动化测试: 六类 rubric 正/反/边界例和每类至少 3 个有效变体；普通错误累计、危险单次终止、危险记录不可抵消、继续练习分界、Top 3 排序、存储失败降级、旧 findings 可读。
-- 手工 / workflow 验证: Owner 逐类试玩并确认参数变化能合理改变判断，报告语气和五段式反馈可操作；分别走完 `End and review` 与 `Continue for practice`；Chrome/Safari/Firefox 完整 20 分钟、手机触控、改键冲突、清除历史和导出 JSON。
+- 自动化测试: `npm run check`；六类 rubric 的正确/错误/边界 fixture、每类 3 个变体可达、普通错误重复模式、危险单次终止、继续练习分界不可抵消、Practice 危险不冒充 Exam 失败、Top 3 排序；反馈只能在 world event 已发生时声称其他车辆减速/避让。
+- 手工 / workflow 验证: Owner 逐类试玩并确认参数变化能合理改变判断，报告语气和五段式反馈可操作；分别走完 `End and review` 与 `Continue for practice`；Chrome/Safari/Firefox 至少各完成核心场景，Mac 和手机各完成一次 15–20 分钟流程。
 - 回归检查: 不同考点/route ID 不混用；虽然 MVP 只有 Newmarket，也用 planned fixture 验证隔离。
-- 失败 / 边界检查: IndexedDB 禁用/满额、刷新运行中 attempt、route version 不可重放、严重错误后继续、继续后再次发生危险、尝试重做或刷新以清除首次危险记录。
+- 失败 / 边界检查: 严重错误后继续、继续后再次发生危险、尝试重做清除首次危险记录、Practice/Exam 状态串线、六类场景某变体不可完成。
 
 **退出标准**:
 
-- [ ] Newmarket 完整流程满足第 2 节成功标准；Owner 已确认六类场景各至少 3 个变体、动态参数不会教成死规则、反馈符合五段式结构，并且危险后立即复盘/继续练习两条路径均保留不可抵消的首次危险记录。未通过时调整参数、rubric、严重等级、文案或流程，不通过修改训练总分或虚构官方通过线解决。
+- [ ] Phase 3 教学验收报告记录为 Pass；Owner 已确认六类场景、动态参数、五段式反馈和危险后两条路径；`npm run check` 与 `git diff --check` 通过。未通过时只调整参数、rubric、严重等级、文案或流程，不通过修改训练总分或虚构官方通过线解决。
+
+#### Phase 3B: 本地数据、设置和弱项训练
+
+**实现范围**:
+
+- [ ] 新建 `services/storage/`，实现 IndexedDB `attempts/checkpoints`、版本校验、10 秒 debounce checkpoint、恢复、删除、清空和去身份化 JSON 导出。
+- [ ] 新建 `features/history/` 和 `features/settings/`，实现本机历史、字幕/语音/低动态/高对比、键位修改、冲突检测和恢复默认。
+- [ ] 实现最近 10 个已完成 attempt 的弱项聚合，以及从报告进入“同 rubric、不同 seed/variant”的 2–5 分钟练习。
+- [ ] 增加多标签页 active attempt 冲突提示和存储不可用的内存/导出降级。
+
+**数据 / migration 改动**:
+
+- [ ] IndexedDB version 1：`attempts` 和 `checkpoints`；`localStorage` preferences v1。
+- [ ] 固化 attempt 的 content/engine version、seed、actions、findings、summary、`firstDangerAtMs` 和 `continuedForPracticeAtMs`；内容升级不得重算覆盖旧 findings。
+
+**Agent 执行约束**:
+
+- 必须遵守: 数据只保存在浏览器；存储失败不阻断当前练习；清除操作必须二次确认且只针对本站数据。
+- 禁止做: 新增账号、遥测或远程备份；自动删除旧记录；用不兼容内容强行恢复 checkpoint。
+- 不确定时先问: 需要提升 schemaVersion、改变导出格式或恢复失败可能导致用户数据丢失。
+
+**本阶段验证**:
+
+- 自动化测试: repository CRUD、checkpoint debounce/恢复、版本不兼容只读、旧 findings 可读、偏好默认/冲突、弱项最近 10 次边界、存储拒绝/满额降级。
+- 手工 / workflow 验证: 刷新恢复运行中 attempt；完成后刷新报告/历史；改键并刷新；导出/删除/清空；两个标签页冲突；禁用 IndexedDB 后完成内存练习。
+- 回归检查: Phase 3A golden attempt 的 findings 不变，持久化前后深度相等。
+- 失败 / 边界检查: segment/10 秒 checkpoint 写失败、finish 保存失败、route version 不可重放、刷新不能清除首次危险记录。
+
+**退出标准**:
+
+- [ ] 完整 MVP 功能就绪；`npm run check`、存储/恢复负向测试和 `git diff --check` 通过；Phase 3 验收报告已追加 3B 结果，且没有未解决的 P0/P1 数据丢失问题。
 
 ### Phase 4: 发布硬化与 1.0
 
@@ -672,10 +782,12 @@ stateDiagram-v2
 **实现范围**:
 
 - [ ] 引入 Playwright，覆盖首页、考试垂直路径、报告、存储降级和 Pages 子路径。
+- [ ] 在 `package.json` 新增 `test:e2e`；更新 `.github/workflows/deploy.yml`，在上传 Pages artifact 前安装所需 Chromium/WebKit 浏览器并依次执行 `npm run check` 与 `npm run test:e2e`。E2E 使用固定 seed 的短 fixture/调试入口，不等待真实 20 分钟。
 - [ ] 完成语义按钮、焦点、字幕、颜色对比、44×44 触控目标、`prefers-reduced-motion` 和文本替代。
 - [ ] 按场景/考点分包，控制首屏；验证已加载 attempt 断网可继续。是否增加 service worker 由实测决定，默认不加。
 - [ ] 完成隐私说明、内容来源/attribution、版本页和本地数据清除入口。
 - [ ] 准备公开站点 smoke test 清单和正式测试报告模板，覆盖 Newmarket 选择、Exam briefing、输入、指令/字幕、暂停恢复、危险事件、报告、历史和弱项重练。
+- [ ] 先将应用版本设为 `1.0.0-rc.1` 并部署 release candidate；正式 smoke 通过前不得创建 `v1.0.0` tag 或宣称 1.0 已发布。
 
 **数据 / migration 改动**:
 
@@ -689,24 +801,26 @@ stateDiagram-v2
 
 **本阶段验证**:
 
-- 自动化测试: `npm run check`、`npm run validate:content`、`npm run test:e2e`。
+- 自动化测试: `npm run check`、`npm run test:e2e`；CI 中两者都必须在 deploy job 的 artifact 上传前通过。
 - 手工 / workflow 验证: Owner 在公开 Pages 完成一次 15–20 分钟端到端流程，覆盖 Newmarket → Exam briefing → Mac 键盘/鼠标 → 英文指令/字幕 → 暂停恢复 → 危险事件处理 → 完整报告 → 本地历史 → 一次弱项重练；在手机完成入口、考点选择和核心触控检查；另验证刷新/hash 深链、断网、禁音、低动态、键盘-only 和 VoiceOver 基本流程。
 - 回归检查: 同一 golden attempt 重放结果；旧 attempt 报告；构建产物无 key/地图/分析 SDK。
 - 失败 / 边界检查: 公开站点白屏、资源 404、内容 chunk 失败、浏览器存储不可用、无 SpeechSynthesis、手机浏览器栏遮挡操作、20 分钟运行后计时/指令/状态异常。
 
 **退出标准**:
 
-- [ ] GitHub Actions 成功部署后，Owner 已在公开 Pages 完成上述 smoke test，不存在 P0/P1 可访问性、规则或数据丢失问题；网络面板无付费地图、分析或其他未声明运行时服务。测试结果保存到 `my-ai-brain/docs/test-reports/` 后，才可将应用版本改为 `1.0.0`、创建 `v1.0.0` tag，并可选创建 GitHub Release。任一核心步骤失败都必须修复、重新部署并复测。
+- [ ] `1.0.0-rc.1` 的 GitHub Actions 和 Owner 完整 smoke 均通过并记录为“RC 通过”；随后只做版本/发布说明变更至 `1.0.0`，重新运行 CI 并部署，在公开站点执行首页、版本、开始考试和历史读取的最终短 smoke；将 Phase 4 报告更新为最终 Pass 后，在该已验证 commit 创建 `v1.0.0` tag，并可选创建 GitHub Release。任一功能性改动都会使此前完整 smoke 失效，必须重新执行受影响路径；P0/P1 未清零不得发布。
 
 ### 整体验收
 
 | 验收领域 | 验证内容 | 命令 / 方法 | 合并前是否必须 |
 |---|---|---|---|
-| 单元 / 组件 | 引擎、rubric、内容 schema、输入和报告 | `npm run test` | Yes |
-| 集成 / workflow | 内容包 → attempt → findings → 存储/重放 | `npm run validate:content && npm run test` | Yes |
-| 端到端 / 运维 | 桌面/手机核心流、Pages 子路径和部署 | `npm run test:e2e` + Pages 手工 smoke | Yes（Phase 4） |
-| 回归测试 | golden attempt、旧内容报告、planned centre 隔离 | Vitest fixtures + Playwright | Yes |
-| 回滚 / 兼容性 | 上一 commit 构建、本地 schemaVersion 兼容 | preview 上一 release + migration fixtures | Yes（发布版） |
+| 静态/单元/构建 | 类型、lint、内容 schema、引擎、rubric、输入、报告和生产构建 | `npm run check` | Yes（所有阶段） |
+| 内容追溯 | 道路事实、Prompt、rubric、ID/引用、证据和版本 | `npm run validate:content`（Phase 1 起已纳入 check） | Yes |
+| 集成 / workflow | 内容包 → attempt → findings → 存储/恢复/重放 | Vitest 集成 fixtures | Yes（对应阶段） |
+| 端到端 | 首页、考点、短路线、危险分支、报告、历史和 Pages 子路径 | `npm run test:e2e` | Yes（Phase 4） |
+| 浏览器/设备 | Chrome、Firefox、Safari、Mac 键鼠和手机触控/布局 | Playwright Chromium/WebKit + Owner 手工验收；Safari 以真实设备为准 | Yes（Phase 2 起按 gate） |
+| 无障碍/降级 | 键盘、焦点、字幕、对比、低动态、禁音、存储不可用 | Playwright + VoiceOver/手工清单 | Yes（Phase 4） |
+| 回滚 / 兼容性 | 上一发布构建、旧 attempt/findings、schemaVersion | 上一 tag preview + migration fixtures | Yes（发布版） |
 
 **必要测试数据 / fixtures**:
 
@@ -717,7 +831,7 @@ stateDiagram-v2
 
 **性能 / 规模检查**:
 
-- 中档手机目标：渲染保持可操作，模拟 tick 无持续 backlog；低动态模式不依赖帧率。
+- Owner 验收手机和 Mac 上，普通模式输入反馈目标不超过 100 ms、无超过 500 ms 的持续 tick backlog；达不到时必须提供可完成同一判断的低动态模式，且评分不依赖帧率。
 - 首屏 gzip 目标 `< 250 KiB`；单考点内容包 gzip 目标 `< 500 KiB`（不含将来音频，MVP 无预录音频）。
 - 单个 20 分钟 attempt 事件 JSON 目标 `< 250 KiB`；通过边沿事件而非逐帧采样控制大小。
 - 最近 100 次 attempt 的列表在本机 200 ms 内完成；超过 100 次只分页，不自动删除。
@@ -737,11 +851,11 @@ stateDiagram-v2
 
 ## 8. 发布和回滚
 
-- 发布顺序: Phase 分支/PR → `npm run check` → 内容审查 → E2E → 合并 `main` → GitHub Actions 构建/部署 → 真实 Pages smoke。
+- 发布顺序: 各 Phase 实现/验证/Owner gate → Phase 4 将版本设为 `1.0.0-rc.1` → `npm run check && npm run test:e2e` → 合并/推送 `main` → GitHub Actions 部署 RC → Owner 在真实 Pages 完整 smoke → 报告记录“RC 通过” → 仅更新版本/发布说明至 `1.0.0` → CI/部署 → 最终短 smoke → 报告更新为最终 Pass → 在验证过的最终 commit 创建 `v1.0.0` tag。
 - Feature flag / 配置开关: `supportStatus` 控制考点；route manifest 控制路线；`features.practice/history/weakness` 可用构建期常量逐阶段开启，不使用远端 flag 服务。
 - 部署顺序: 静态代码和内容同一个不可分割的 commit；不得先发布引用不存在内容的 UI。
-- 发布期间监控: 查看 GitHub Actions；部署后检查首页、Newmarket、一次短场景、报告、资源 404 和浏览器 console/network。
-- 回滚步骤: 将 `main` revert 到上一个成功 commit 并推送，Actions 重新部署；若只是内容错误，可先把对应 route/centre 标为不可用后发布热修。
+- 发布期间监控: 查看 GitHub Actions；RC 完整 smoke 检查首页、Newmarket、完整考试、报告/历史、资源 404 和浏览器 console/network；最终版短 smoke 再确认版本、首页、开始考试及既有历史可读。
+- 回滚步骤: 优先对问题 commit 执行可审计的 `git revert` 并推送，由 Actions 重新部署；若只是内容错误，可先把对应 route 标为 `retired` 或 centre 标为不可用后发布热修。不得重写已经公开的 `v1.0.0` tag。
 - 如果回滚，数据如何清理: 不主动删除 IndexedDB。旧版本不能理解新 schema 时进入只读历史/导出模式；不得用 `indexedDB.deleteDatabase()` 作为自动修复。
 
 ## 9. 风险和缓解
@@ -768,15 +882,19 @@ stateDiagram-v2
 - [x] 整体验收写清楚必须执行的命令或手工检查。
 - [x] 高风险决策标成“不确定时先问”。
 - [x] 非目标足够明确，能防止实现时扩大范围。
-- [ ] 实现前由 Owner 审阅本 Draft，并将状态改为 `Locked` 或记录修订意见。
+- [x] Owner 已要求正式收口，设计状态已改为 `Locked`，v1.0 是实现基线。
 - [ ] 每个 Phase 开始前确认上一阶段退出标准和 commit。
 - [ ] 每次内容变更同步更新 evidence、checkedAt、contentVersion 和测试 fixture。
+- [ ] 每个 Owner gate 形成 `my-ai-brain/docs/test-reports/` 验收记录；未通过时不进入下一阶段。
+- [ ] 实现阶段若要改变 Locked 决策，先更新设计修订记录并说明迁移、测试和已发布数据影响。
 
-## 11. Open Questions
+## 11. Open Questions（已关闭）
 
-当前没有阻塞架构实现的开放问题。以下是已定义交付物的 Phase gate，不是要求 Owner 预先提供额外道路资料；Agent 必须完成相应核验并提交 Owner 验收，不能自行猜测：
+截至 v1.0 没有阻塞实现的开放问题。此前四项问题已被改写为第 7 节中的可执行 gate，并分别明确了交付物、自动化验证、Owner 手工验收、失败处理和退出标准：
 
-- [ ] Phase 1 内容核验：建立 Newmarket 垂直切片道路事实清单。经官方、政府开放资料或合规道路数据核验的信息，可以使用真实道路名称和结构；无法核验的车道、坐标、限速、标线和信号时序必须省略，或标为不对应具体路口的 `authored` 教学抽象，不得宣称是现实路口或官方考试路线的精确复刻。该清单至少包含“场景、可使用的真实名称、已核验结构、未核验内容、证据来源、核验日期、证据等级”七项，并由 Owner 验收。
-- [ ] Phase 2 视觉验收：Agent 提供可在 Mac 和手机运行的 5–8 分钟垂直切片，由 Owner 验证玩家无需依赖复盘答案，即可从 SVG 场景辨认当前/目标车道、车辆远近与相对速度、安全/危险 gap、信号/标线以及潜在冲突关系。普通动画和低动态模式都必须可理解，安全与危险不能只靠颜色区分；未通过时先调整透视、车辆大小、运动线索、标线、HUD、箭头、数字或文本，不直接扩大为 Street View、实景素材或实时 3D。
-- [ ] Phase 3 教学验收：Agent 提供包含红灯右转、黄灯、多车道左转、高速并入、跟慢车和高速驶离的完整 Newmarket MVP，每类至少包含 3 个参数化变体。Owner 试玩并确认：正确判断会随速度、距离、车流、gap、信号和可停车条件合理变化；反馈按照“情境—动作—影响—改进—依据”组织，语气具体、克制且不冒充 DriveTest 官方结论；首次危险行为永久保留在当前 attempt 中，用户可选择立即复盘，或在明确标记为继续练习的状态下完成剩余路线，后续表现不能抵消危险记录。未通过时调整参数、rubric、严重等级、文案或流程，不通过修改训练总分或虚构官方通过线解决。
-- [ ] Phase 4 发布验收：GitHub Actions 部署成功后，Owner 必须在公开地址 `https://nieyy.github.io/ontario-g-test/` 完成一次 15–20 分钟端到端 smoke test，覆盖 Newmarket 选择、Exam briefing、Mac 键盘/鼠标操作、英文指令与字幕、暂停恢复、危险事件处理、完整报告、本地历史和一次弱项重练，并在手机完成入口、考点选择及核心触控检查；同时确认资源无 404，运行时不请求付费地图、分析或其他未声明服务。任何核心步骤失败都必须修复、重新部署并复测；全部通过并将正式测试报告保存到 `my-ai-brain/docs/test-reports/` 后，才能将应用版本标为 `1.0.0`、创建 `v1.0.0` tag，并可选创建 GitHub Release。
+- Phase 1：七字段 Newmarket 道路事实清单与 evidence 校验。
+- Phase 2：Mac/手机、普通/低动态模式的 SVG 视觉验收。
+- Phase 3A：六类参数化场景、五段式反馈和危险后继续练习的教学验收。
+- Phase 4：`1.0.0-rc.1` 公开 Pages 完整 smoke、正式版本短 smoke 和 `v1.0.0` 发布。
+
+这些 gate 是实现计划的一部分，不是待 Owner 现在补充答案的问题；每个 gate 到达时由 Agent 提供可运行产物和验收清单，Owner 只需基于实际结果接受或退回。任何新增的阻塞性问题都必须先以 v1.1+ 修订本文，不能在实现中静默改变 Locked 决策。
