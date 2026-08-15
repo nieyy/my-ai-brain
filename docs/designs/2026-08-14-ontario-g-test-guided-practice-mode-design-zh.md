@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **Owner**: nieyuanyuan
-**状态**: Draft
+**状态**: Locked
 **源项目 / 分支**: `nieyy/ontario-g-test / main @ ff4e573`
 **相关调研 / 代码讲解 / review**: [Ontario G Test 互动驾驶备考游戏 MVP 设计 v1.1](./2026-08-12-ontario-g-test-interactive-game-mvp-design-zh.md)、[Ontario G Test 真实路况互动驾驶游戏调研 v1.1](../research/2026-08-12-ontario-g-test-interactive-driving-game-research-zh.md)
 
@@ -11,6 +11,7 @@
 | 版本 | 日期 | 作者 | 摘要 |
 |---|---|---|---|
 | v0.1 | 2026-08-14 | nieyuanyuan | 初版设计：定义考试/练习模式边界、完整路线与典型场景练习、Coach 指导契约、即时反馈、重试、记录迁移和分阶段验收。 |
+| v1.0 | 2026-08-15 | nieyuanyuan | 正式版收口：拆分初始配置与运行时教学语境，以 `CoachState` 承担教学推进、`CoachFrame` 仅承担呈现，明确 action array 顺序、variant 解析、finding context、v2 保留旧 `runStage` 的回滚兼容，并关闭开放问题。 |
 
 ## 1. 摘要
 
@@ -49,7 +50,7 @@
 3. 完整路线在相同 seed 下与 Exam 使用相同场景 ID、变体、道路推进、车辆控制、考官英文指令和评分器。
 4. 练习中用不遮挡道路的 Coach 提供 Prepare、Act、Feedback 三阶段指导，并用当前键位动态显示下一步操作。
 5. 教学顺序独立于结果评分；`guidance.steps` 不复用或重排 `requiredActions` 来冒充教学内容。
-6. 普通错误不中断；危险错误暂停并允许重试当前场景或从当前状态继续，练习结果不得显示成“考试失败”。
+6. 普通错误不中断；评分器产出危险 finding 时暂停并允许重试当前场景或从当前状态继续，练习结果不得显示成“考试失败”。
 7. 单场景练习支持“相同条件重试”和“下一个变体”，两条路径均可确定性复现。
 8. 旧 attempt/checkpoint 保持可读；练习记录不会无差别放大考试弱项统计。
 9. 键盘、鼠标、触摸、中文辅助字幕、低动态、高对比和无障碍语义继续可用。
@@ -118,7 +119,7 @@
 
 ## 5. 选择
 
-**选择的方案**: 方案 A。保留一个 `DrivingEngine` 作为世界状态、动作记录、场景完成和 finding 的唯一事实源；新增纯 TypeScript `GuidanceController`，以 `GuidancePlan + EngineState + 本场景动作` 计算 `CoachFrame`。React 只渲染 Coach、步骤状态和重试入口。
+**选择的方案**: 方案 A。保留一个 `DrivingEngine` 作为世界状态、动作记录、场景完成和 finding 的唯一事实源；新增纯 TypeScript `GuidanceController`，以 `GuidancePlan + EngineState + 本场景有序动作` 推进 `CoachState`，再派生只读 `CoachFrame`。React 只渲染 Coach、步骤状态和重试入口。
 
 **为什么选它**:
 
@@ -170,9 +171,11 @@ flowchart LR
   L["GuidancePlan"] --> M["GuidanceController"]
   I --> M
   G --> M
-  M --> N["CoachFrame"]
-  N --> O["Coach Panel + Control Highlight"]
-  G --> P["Attempt / Checkpoint Storage"]
+  M --> N["CoachState"]
+  N --> O["CoachFrame"]
+  O --> P["Coach Panel + Control Highlight"]
+  G --> Q["Attempt / Checkpoint Storage"]
+  N --> Q
 ```
 
 依赖和事实边界：
@@ -180,7 +183,7 @@ flowchart LR
 ```text
 content/data + content/guidance
   -> domain/engine             # 驾驶与评分事实
-  -> domain/guidance           # 只读派生 CoachFrame
+  -> domain/guidance           # 只读推进 CoachState、派生 CoachFrame
   -> App / CoachPanel          # 页面与呈现
   -> services/storage          # record/checkpoint 兼容保存
 ```
@@ -189,7 +192,7 @@ content/data + content/guidance
 
 1. `domain/guidance` 可以 import `content/types` 和读取 `EngineState`，但不能调用 `recordAction()`、`advanceEngine()` 或修改状态。
 2. `domain/engine` 不 import GuidancePlan、React、DOM 或 CSS。
-3. scoring 不读取 `CoachFrame`；用户是否打开/看到提示不改变 finding。
+3. scoring 不读取 `CoachState` 或 `CoachFrame`；用户是否打开/看到提示不改变 finding。
 4. Renderer 不根据 Coach 推进道路；控件高亮只改变 presentation class/ARIA。
 5. `buildRoute()` 只接收 seed 和 scope，不接收 guidance visibility。
 
@@ -224,7 +227,7 @@ src/
     validate.ts                   # guidance 完整性/语义校验
   domain/
     engine.ts                     # 显式 mode/context、resetScenario 纯函数
-    guidance.ts                   # deriveCoachFrame / feedback 纯函数
+    guidance.ts                   # CoachState reducer / CoachFrame 纯函数
     guidance.test.ts
   components/
     ModeSelect.tsx
@@ -248,6 +251,7 @@ e2e/
 
 ```ts
 type AttemptMode = 'exam' | 'practice'
+type GuidanceMode = 'off' | 'guided'
 
 type PracticeScope =
   | { kind: 'full-route' }
@@ -265,14 +269,28 @@ type RunConfig =
       mode: 'exam'
       centreId: CentreId
       scope: { kind: 'full-route' }
-      guidance: 'off'
+      initialGuidance: 'off'
       seed: number
     }
   | {
       mode: 'practice'
       centreId: CentreId
       scope: PracticeScope
-      guidance: 'guided'
+      initialGuidance: 'guided'
+      seed: number
+    }
+
+type ResolvedPracticeScope =
+  | { kind: 'full-route' }
+  | (Extract<PracticeScope, { kind: 'scenario' }> & { variantId: string })
+
+type ResolvedRunConfig =
+  | Extract<RunConfig, { mode: 'exam' }>
+  | {
+      mode: 'practice'
+      centreId: CentreId
+      scope: ResolvedPracticeScope
+      initialGuidance: 'guided'
       seed: number
     }
 
@@ -286,13 +304,23 @@ type AttemptStatus =
   | 'aborted'
 
 type FindingContext = 'exam' | 'practice' | 'legacy-unknown'
+
+interface AttemptRuntimeContext {
+  originMode: AttemptMode
+  guidanceMode: GuidanceMode
+  findingContext: Exclude<FindingContext, 'legacy-unknown'>
+  continuedAfterDangerAtSeconds?: number
+}
 ```
 
 - `mode` 表示 attempt 最初从哪个入口创建，完成前不改变。
-- `guidance` 表示当前是否显示 Coach。Exam 初始为 `off`；Exam 危险后选择继续时仍保留 `mode='exam'`，但后续 finding 标记 `FindingContext='practice'`，并可显示 guided Coach。
+- `initialGuidance` 是不可变启动配置，不冒充运行中的 Coach 状态；`AttemptRuntimeContext.guidanceMode` 才表示当前是否显示 Coach。
+- Exam 危险后选择继续时，`originMode` 和 `RunConfig.mode` 仍为 `exam`，但运行时切换为 `guidanceMode='guided'`、`findingContext='practice'`，并记录 `continuedAfterDangerAtSeconds`。这次切换由 Attempt Controller 管理，不写入 Driving Engine。
 - `scope` 决定 full route 或一个 scenario，不改变引擎的动作语义。
+- `PracticeScope.variantId` 只允许在用户尚未开始、由系统选择变体的输入配置中缺省；开始运行、保存 checkpoint、重试和写 attempt 前必须解析为 `ResolvedRunConfig`，单场景的 `variantId` 必填。
 - `status` 只表达生命周期，不再承担教学语境。
 - `practiceSessionId + roundIndex` 用于把同一典型场景的多次重试在历史中分组，不新建远端或新的数据库 store。
+- `EngineState` 保留驾驶世界、评分事实和模拟暂停所需字段；它不再承担 origin mode、guidance visibility、finding context 或完整页面生命周期。`AttemptStatus`、`AttemptRuntimeContext` 与已解析配置由 Attempt Controller 持有，避免重试、恢复和危险后继续再次混入 `RunStage`。
 
 #### Guidance 内容契约
 
@@ -358,8 +386,11 @@ interface GuidancePlan {
 - 指导条件只允许穷举的 typed condition，不允许 JavaScript 表达式、任意属性路径或 `eval` 字符串。
 - plan 可以由多个 variant 共用；Yellow Light 的 `safeStop=true/false` 若步骤不同，应分别绑定不同 plan，而不是在 UI 中猜测分支。
 - Guidance 文案描述练习动作和风险，不宣称官方逐字评分或固定路线。
+- `startsWhen` 和 `expiresWhen` 数组内的条件均按逻辑 AND 计算；步骤按 `steps` 数组顺序推进，第一个未完成且 `startsWhen` 全满足的 step 是 current step。
+- `expiresWhen` 全满足时，只把该 step 标记一次 missed 并继续推进；需要 OR 分支时拆成 variant-specific plan 或独立 step，不在运行时偷偷加入无类型表达式。
+- `completeWhen.kind='action'` 只认 authored step window 内的动作时间戳。动作发生后、Coach UI 尚未来得及渲染时可以追认；早于窗口或晚于过期条件的动作保持 neutral，不能为了避免重复操作而追认不合时机的动作。
 
-#### Coach 派生状态
+#### Coach 领域状态与呈现
 
 ```ts
 type CoachFeedbackTone = 'positive' | 'corrective' | 'danger'
@@ -370,6 +401,16 @@ interface CoachFeedback {
   messageEn: string
   messageZh?: string
   atSeconds: number
+}
+
+interface CoachState {
+  planId: string
+  planVersion: number
+  currentStepIndex: number
+  completedStepIds: string[]
+  missedStepIds: string[]
+  lastProcessedActionIndex: number
+  feedback?: CoachFeedback
 }
 
 interface CoachFrame {
@@ -389,45 +430,90 @@ interface CoachFrame {
 }
 ```
 
-`deriveCoachFrame(previousFrame, plan, engineState, latestAction)` 是确定性纯函数：
+`CoachState` 是可测试、可恢复的领域状态，`CoachFrame` 只是一帧 presentation data。实现不得用 `CoachFrame` 反推或保存教学进度。GuidanceController 分成两个确定性纯函数：
 
+```ts
+function reduceCoachState(input: {
+  coach: Readonly<CoachState>
+  plan: GuidancePlan
+  engineState: Readonly<EngineState>
+  scenarioActions: readonly InputAction[]
+  latestFinding?: FindingV2
+}): CoachState
+
+function toCoachFrame(input: {
+  coach: Readonly<CoachState>
+  plan: GuidancePlan
+  keyBindings: KeyBinding[]
+  subtitlesZh: boolean
+}): CoachFrame
+```
+
+推进规则：
+
+- `createCoachState()` 将 `lastProcessedActionIndex` 初始化为 `-1`；消费区间是 `lastProcessedActionIndex + 1 ... scenarioActions.length - 1`，返回时固化为最后已消费下标。
 - expected action 完成当前 step：标记 done，产生 positive feedback，推进至下一可激活 step。
 - 用户执行 `oppositeActions`：产生 corrective feedback，但动作仍交给驾驶引擎处理，Coach 不撤销动作。
 - 用户执行与当前步骤无关但可能合理的加速、刹车或观察：记录为 neutral，不弹“错误”，避免提示噪音。
 - step 的有效窗口结束仍未完成：标记 missed，并显示一次 corrective feedback；不得每 tick 重复生成。
-- dangerous finding 由评分器产生后，Coach 使用 finding 的 situation/action/impact 进入 danger feedback；Coach 自身不发明危险结论。
+- `scenarioActions` 是 append-only 数组，数组下标就是本场景动作顺序；reducer 只消费 `(lastProcessedActionIndex, scenarioActions.length)` 区间，并在返回状态中固化新 index，同一 React render 或 checkpoint replay 不得重复消费动作。
+- dangerous finding 由评分器在既有决策/场景完成点产生后，Coach 使用 finding 的 situation/action/impact 进入 danger feedback；Coach 自身不发明危险结论。v1.0 不新增第二套 action-time 实时危险判定器。
 - feedback 以模拟时钟显示约 2.5 秒；暂停时不消失，恢复后继续计时。
 
 #### AttemptRecord v2 与迁移
 
 ```ts
-interface AttemptRecordV2 extends Omit<AttemptRecord, 'runStage'> {
+type FindingV2 = Finding & {
+  context: FindingContext
+}
+
+interface AttemptRecordV2 extends AttemptRecord {
   schemaVersion: 2
+  /** @deprecated 仅供 1.0 reader 与回滚兼容，不作为新逻辑事实源 */
+  runStage: RunStage
   mode: AttemptMode
   scope: { kind: 'full-route' } | {
     kind: 'scenario'
     scenarioType: ScenarioType
+    variantId: string
     practiceSessionId: string
     roundIndex: number
     retryOfAttemptId?: string
   }
   continuedAfterDangerAtSeconds?: number
-  findingContexts: Record<string, FindingContext>
-  guidanceSummary?: {
-    planIds: string[]
+  findings: FindingV2[]
+  guidanceSummary?: Array<{
+    planId: string
     completedStepIds: string[]
     missedStepIds: string[]
-  }
+  }>
+}
+
+type PersistedEngineStateV2 = EngineState & {
+  /** @deprecated 仅供 1.0 checkpoint reader 与回滚兼容 */
+  stage: RunStage
+}
+
+interface AttemptCheckpointV2 extends AttemptCheckpoint<PersistedEngineStateV2> {
+  schemaVersion: 2
+  config: ResolvedRunConfig
+  runtime: AttemptRuntimeContext
+  status: AttemptStatus
+  coach?: CoachState
+  guidancePlanVersion?: number
 }
 ```
 
 - IndexedDB object store 结构不变，无需升级数据库 version；record 内部使用 `schemaVersion: 2`。
+- v2 暂时保留旧 reader 依赖的 `runStage` 和 `AttemptRecord` 必填字段，新增字段由旧代码忽略。保存时只从正式字段单向派生兼容值：未继续的 Exam 为 `exam`，从 Practice 入口启动为 `practice`，Exam 危险后继续为 `continued-practice`；新逻辑禁止反向读取该字段。
+- v2 checkpoint 的 `state.stage` 使用同一规则派生，只用于 `ff4e573` 回滚恢复；新代码恢复后立即 normalize 为 `config/runtime/status`，不得用 deprecated `stage` 覆盖正式字段。
 - `normalizeAttemptRecord()` 读取没有 schemaVersion 的旧记录：
-  - `runStage='exam'` -> `mode='exam'`、full route，旧 findings context 为 exam。
-  - `runStage='practice'` -> `mode='practice'`、scope 从 scenarioIds 推断，旧 findings context 为 practice。
-  - `runStage='continued-practice'` -> 保持历史可见和可导出，但因旧数据没有危险后分界点，findings context 标为 legacy-unknown，不进入新 exam-only 弱项计算。
-- checkpoint 恢复时用 `normalizeEngineCheckpoint()` 将旧 `stage` 转换为 `mode/guidance/continuedAfterDanger`；无法确定的旧字段使用保守值，不删除 checkpoint。
-- 新版本保存 attempt 前必须固化 `mode/scope/findingContexts`，报告不得根据当前 UI 状态反推。
+  - `runStage='exam'` -> `mode='exam'`、full route，每个旧 finding 的 context 为 exam。
+  - `runStage='practice'` -> `mode='practice'`；`scenarioIds` 恰好一个且能在对应 content/current registry 解析时，将该 ID 固化为 scenario scope 的 `variantId` 并反查 `scenarioType`，否则按 full route。无法解析的单场景旧数据只允许 History/导出读取，不允许据此执行 same retry。
+  - `runStage='continued-practice'` -> 保持历史可见和可导出，但因旧数据没有危险后分界点，每个 finding 的 context 标为 legacy-unknown，不进入新 exam-only 弱项计算。
+- checkpoint 恢复时用 `normalizeEngineCheckpoint()` 将旧 `stage` 转换为不可变 `RunConfig`、`AttemptRuntimeContext` 和 `AttemptStatus`；无法确定的旧字段使用保守值，不删除 checkpoint。新旧双向 smoke 必须同时覆盖 attempt record 和进行中的 checkpoint。
+- 新版本保存 attempt 前必须固化 `mode/scope/findings[].context`，报告不得根据当前 UI 状态反推。
+- `NormalizedAttemptRecord` 是 History、报告、导出和弱项计算的唯一读取模型；UI 不直接对 v1/v2 做分支。
 
 #### 弱项和历史语义
 
@@ -459,34 +545,45 @@ function createRunConfig(input: {
   seed: number
 }): RunConfig
 
-function createEngine(config: RunConfig): EngineState
+function resolveRunConfig(config: RunConfig): ResolvedRunConfig
+
+function createEngine(config: ResolvedRunConfig): EngineState
 
 function getGuidancePlan(variantId: string): GuidancePlan | undefined
 
-function deriveCoachFrame(input: {
-  previous?: CoachFrame
+function createCoachState(plan: GuidancePlan): CoachState
+
+function reduceCoachState(input: {
+  coach: Readonly<CoachState>
   plan: GuidancePlan
-  state: Readonly<EngineState>
-  latestAction?: InputAction
-  latestFinding?: Finding
+  engineState: Readonly<EngineState>
+  scenarioActions: readonly InputAction[]
+  latestFinding?: FindingV2
+}): CoachState
+
+function toCoachFrame(input: {
+  coach: Readonly<CoachState>
+  plan: GuidancePlan
   keyBindings: KeyBinding[]
+  subtitlesZh: boolean
 }): CoachFrame
 
 function restartScenario(input: {
-  completed: Readonly<EngineState>
+  source: Readonly<EngineState>
+  config: ResolvedRunConfig
   strategy: 'same' | 'next'
-}): { config: RunConfig; state: EngineState }
+}): { config: ResolvedRunConfig; state: EngineState; coach: CoachState }
 
 function normalizeAttemptRecord(
   stored: AttemptRecord | AttemptRecordV2,
 ): NormalizedAttemptRecord
 ```
 
-`restartScenario('same')` 保持 centre/contentVersion/seed/scenario ID/variant parameters；`restartScenario('next')` 按内容数组顺序循环到下一个 variant，并派生新 seed，不直接调用 `Math.random()`。
+`resolveRunConfig()` 在 Engine 创建前固化 variant；运行期、checkpoint 和重试代码不接受未解析配置。`restartScenario('same')` 保持 centre/contentVersion/seed/scenario ID/variant parameters；`restartScenario('next')` 按内容数组顺序循环到下一个 variant，并从 `practiceSessionId + roundIndex + variantId` 确定性派生新 seed，不直接调用 `Math.random()`。
 
 #### 输入校验
 
-- mode 必须为 `exam|practice`；Exam 只允许 full-route 和 guidance off。
+- mode 必须为 `exam|practice`；Exam 只允许 full-route 和 `initialGuidance='off'`。
 - Practice scenario scope 必须来自 `scenarioOrder`，variant 必须属于所选 centre/type。
 - GuidancePlan 的所有 variant/step/action 引用在 `validate:content` 中校验；Practice 入口只有在六类均完整时启用。
 - 恢复 checkpoint 时，以 checkpoint 固化 config 为准，不使用用户之后在首页新选的 mode/scope。
@@ -518,13 +615,13 @@ type PracticeError =
 | 典型场景选择 | Practice / Typical scenario | 展示六类卡片、时长、训练重点和推荐弱项 -> 选择一类 | 创建 one-scenario Practice RunConfig |
 | Prepare 提示 | 场景开始/目标尚远 | Coach 显示观察目标和路况关注点，不高亮提交动作 | 不提前泄露不可见交通信息，不替用户做决定 |
 | Act 提示 | startsWhen 全满足 | 显示当前 step、快捷键并高亮一个控制 | 用户动作仍由同一 Input -> Engine 路径处理 |
-| 即时反馈 | 动作或 step 过期 | positive/corrective/danger 反馈一次 -> 更新 CoachFrame | 普通错误不中断；危险来自 scoring finding |
+| 即时反馈 | 动作或 step 过期 | positive/corrective 反馈一次 -> 更新 CoachState 并渲染 CoachFrame | 普通错误不中断；不新建第二套评分器 |
 | 完整路线场景衔接 | 非最终场景完成 | 显示约 4 秒非阻塞摘要；允许展开详情，默认继续下一场景 | 保持近似考试连续性，不强制每段停下来 |
 | 单场景完成 | scenario 完成 | 固化本轮 -> Round Summary | 可 Retry same、Try next variation、Choose another scene |
 | 相同条件重试 | Round Summary | 保存旧 round -> 复用 seed/variant -> reset 世界/动作/Coach | 新 attempt ID，初始状态可深度比较 |
 | 下一个变体 | Round Summary | 保存旧 round -> deterministic next variant -> 新 seed | 遍历三变体前不重复 |
-| Practice 危险错误 | dangerous finding | 暂停 -> 显示 situation/action/impact/improvement | Retry this scene 或 Continue from here；不显示考试失败 |
-| Exam 危险后继续 | 现有 Danger Review | 保留 origin mode=exam 和 exam findings -> guidance 开启 -> 后续 context=practice | 报告区分危险前考试与危险后练习，不清除首次危险 |
+| Practice 危险错误 | scoring 在既有决策/场景完成点产出 dangerous finding | 暂停 -> Coach 复用 finding 显示 situation/action/impact/improvement | Retry this scene 或 Continue from here；不显示考试失败 |
+| Exam 危险后继续 | 现有 Danger Review | 保留 `originMode='exam'` 和既有 exam findings -> 运行时 `guidanceMode='guided'` -> 后续 context=practice | 报告区分危险前考试与危险后练习，不清除首次危险 |
 | 弱项推荐 | Home/History | exam-context 最近十次；无 exam 时 fallback practice | 推荐场景并标注证据来源 |
 | 页面隐藏 | visibilitychange | 释放油门刹车 -> 暂停 clock/Coach feedback -> checkpoint | 返回后显式恢复，提示步骤不跳过 |
 
@@ -539,7 +636,7 @@ stateDiagram-v2
   Correcting --> Acting: feedback acknowledged / expires
   Confirming --> Preparing: next step exists
   Confirming --> RoundSummary: final step / scenario complete
-  Acting --> DangerReview: dangerous finding
+  Acting --> DangerReview: scoring emits dangerous finding
   DangerReview --> Preparing: retry scene
   DangerReview --> Acting: continue from here
   RoundSummary --> Preparing: retry same / next variant
@@ -566,7 +663,7 @@ Coach 与 driving status 正交：manual pause、页面隐藏和 modal 可以暂
 - 预期错误:
   - GuidancePlan 缺失/引用错误：构建失败；运行时兜底禁用 Practice，Exam 可用。
   - 用户按了未来步骤：动作正常进入引擎；若是明确 opposite action 才纠正，否则不产生噪音。
-  - 用户在提示出现前已完成合法动作：Coach 从动作窗口识别并直接标记完成，不要求重复做一次来满足 UI。
+  - 用户在 Coach UI 渲染前、但已进入 authored step window 后完成合法动作：Coach 从动作时间戳追认并直接标记完成，不要求重复；窗口外动作不追认。
   - 用户改键：Coach 每次渲染从 Preferences 获取 key label；计划不缓存旧键位。
   - SpeechSynthesis 不可用：考官字幕和 Coach 文本继续，Coach 本来就不自动朗读。
   - 存储不可用：当前 Practice 保留内存，报告可查看/导出；重试仍可在当前标签页进行。
@@ -581,10 +678,11 @@ Coach 与 driving status 正交：manual pause、页面隐藏和 modal 可以暂
   - 中文提示缺失时只显示英文，不由英文运行时机器翻译。
 - 并发 / 顺序:
   - 沿用单标签 active attempt lock；同一 practiceSession 的 retry 必须先释放旧 attempt lock 再创建新 lock。
-  - 一个动作先进入 driving engine，再以相同 sequence 供 GuidanceController 派生；同 tick 不得因 React render 次数重复消费。
+  - 每个输入动作只 append 一次到本场景 `scenarioActions`，数组下标是唯一顺序。Attempt Controller 先让 Engine 处理动作，再把同一 post-action `EngineState` 和 append-only action array 交给 `reduceCoachState()`。
+  - `lastProcessedActionIndex` 保证同一动作不会因 React render、effect 重跑或 checkpoint replay 被重复消费；文档和实现不额外发明第二个 sequence 计数器。
   - finding 生成后再通知 Coach，确保 danger feedback 使用评分事实。
 - 幂等性:
-  - Coach completion key 为 `attemptId + planId + stepId`；相同 action 重放不重复计数。
+  - Coach completion key 为 `attemptId + planId + stepId`，消费边界为 `lastProcessedActionIndex`；相同 action array 重放不重复计数。
   - Round 保存、finish 和 retry 创建均可重复调用但只能生成一个有效下轮 ID。
   - next variant 由 `(currentVariantIndex + 1) % variants.length` 决定；刷新恢复不改变选择。
 - 安全边界:
@@ -606,7 +704,7 @@ Coach 与 driving status 正交：manual pause、页面隐藏和 modal 可以暂
 - 回滚 / 禁用开关:
   - 静态常量 `PRACTICE_MODE_ENABLED` 控制 Mode Select 是否开放 Practice；flag=false 时 Exam 仍可用，历史中的 v2 Practice 记录仍可读。
   - Guidance 内容校验失败在运行时将 Practice 标记 unavailable，不隐藏 Exam。
-  - 回滚到 `ff4e573` 时 v2 记录会被旧代码当普通结构读取存在风险，因此正式发布前必须先验证旧版本对新增字段的宽松读取；若不兼容，回滚目标必须是包含 v2 reader 的最小兼容 commit，而不是直接回到 1.0。
+  - v2 record 保留旧 `runStage`、既有必填字段和既有 findings 形态，v2 checkpoint 保留旧 `state.stage` 和 EngineState 必填字段，`ff4e573` 应能忽略新增字段；正式发布前仍必须以真实 v2 fixture 验证旧 History、报告、导出和 checkpoint resume。任一失败时，回滚目标改为包含 v2 reader 的最小兼容 commit，而不是直接回到 1.0。
 
 ## 7. 分阶段实现与验证计划
 
@@ -616,7 +714,7 @@ Coach 与 driving status 正交：manual pause、页面隐藏和 modal 可以暂
 
 | Phase | 前置条件 | 核心交付 | Owner gate | 建议证据文件 |
 |---|---|---|---|---|
-| Phase 1 | `main @ ff4e573`、v0.1 设计确认 | mode/scope/record v2 契约、迁移、Mode/Practice Select，feature flag 默认关闭 | 能选择但不进入未完成 Coach；旧历史可读 | `docs/test-reports/2026-08-14-ontario-g-test-practice-phase-1-contract-zh.md` |
+| Phase 1 | `main @ ff4e573`、Locked v1.0 设计 | mode/scope/runtime context/record v2 契约、迁移、Mode/Practice Select，feature flag 默认关闭 | 能选择但不进入未完成 Coach；旧历史可读 | `docs/test-reports/2026-08-14-ontario-g-test-practice-phase-1-contract-zh.md` |
 | Phase 2 | Phase 1 退出 | Right on red 垂直切片、Coach 纯函数/UI、same retry | Mac/手机能完成一轮并按 MSS 提示重试 | `docs/test-reports/2026-08-14-ontario-g-test-practice-phase-2-coach-zh.md` |
 | Phase 3 | Phase 2 退出 | 六类 guidance、完整路线、next variant、历史/弱项语义 | 六类均可完成；Exam/Practice 隔离通过 | `docs/test-reports/2026-08-14-ontario-g-test-practice-phase-3-content-zh.md` |
 | Phase 4 | Phase 3 退出 | E2E/无障碍/兼容/Pages 发布，版本 1.1.0 | 公开站点完整 Practice smoke | `docs/test-reports/2026-08-14-ontario-g-test-practice-phase-4-release-zh.md` |
@@ -635,11 +733,11 @@ Coach 与 driving status 正交：manual pause、页面隐藏和 modal 可以暂
 
 **实现范围**:
 
-- [ ] `src/content/types.ts`: 新增 `AttemptMode`、`PracticeScope`、`RunConfig`、`AttemptStatus`、`FindingContext`、record v2 类型；旧 `RunStage` 标为 legacy reader 使用。
-- [ ] `src/domain/engine.ts`: `createEngine(config)` 与 route builder 解耦 mode/guidance；finding 固化 context；增加 full-route Exam/Practice 同 seed 等价测试。
+- [ ] `src/content/types.ts`: 新增 `AttemptMode`、`PracticeScope`、`RunConfig`、`ResolvedRunConfig`、`AttemptRuntimeContext`、`AttemptStatus`、`FindingContext`、record v2 类型；旧 `RunStage` 仅保留为兼容字段。
+- [ ] Attempt Controller / `src/domain/engine.ts`: controller 管理 runtime context，`createEngine(resolvedConfig)` 与 route builder 解耦 mode/guidance；finding 固化 context；增加 full-route Exam/Practice 同 seed 等价测试。
 - [ ] `src/services/storage.ts`: `normalizeAttemptRecord()`、`normalizeEngineCheckpoint()` 和 v2 save；旧 continued-practice 保守处理。
 - [ ] `src/components/ModeSelect.tsx`、`PracticeSelect.tsx`: Exam/Guided Practice、Full route 和六类场景卡；推荐弱项显示 evidence source。
-- [ ] `src/App.tsx`: 用 `RunConfig` 替代 `practiceType` 的双重含义，新增页面状态和 back 行为；Practice feature flag 默认关闭或仅 debug 开放。
+- [ ] `src/App.tsx`: 用 `RunConfig + AttemptRuntimeContext` 替代 `practiceType/RunStage` 的双重含义，新增页面状态和 back 行为；Practice feature flag 默认关闭或仅 debug 开放。
 
 **数据 / migration 改动**:
 
@@ -655,26 +753,26 @@ Coach 与 driving status 正交：manual pause、页面隐藏和 modal 可以暂
 
 **本阶段验证**:
 
-- 自动化测试: config union、非法 scope、同 seed route 等价、record/checkpoint v1->v2、weakest context、页面模式选择和 back navigation。
+- 自动化测试: config union、未解析 variant 拒绝启动、Exam 危险后 runtime context 切换、同 seed route 等价、record/checkpoint v1->v2、weakest context、页面模式选择和 back navigation。
 - 手工 / workflow 验证: 打开已有 History、导出旧 JSON、Home -> Newmarket -> Mode -> Practice Select；flag off 时公开主流程仍与 1.0 一致。
 - 回归检查: `npm run check`；现有 `e2e/app.spec.ts` 全通过。
 - 失败 / 边界检查: 缺 scenario type、旧 continued-practice、checkpoint 中途刷新、另一个标签页 active lock、Practice flag off。
 
 **退出标准**:
 
-- [ ] RunConfig 不需要 `practiceType` 推断模式；Exam/Practice 同 seed full route 深度相等。
+- [ ] RunConfig 不需要 `practiceType` 推断模式；运行中的单场景配置均已解析 variant；Exam/Practice 同 seed full route 深度相等。
 - [ ] 所有旧 fixture 可读且无自动数据删除。
 - [ ] Mode/Practice Select 完成键盘、触摸和无障碍基础验收，但公开 flag 尚未开启。
 
 ### Phase 2: Right on red 引导垂直切片
 
-**目标**: 用一个代表性场景验证 GuidancePlan、Coach 纯函数、MSS 控件高亮、即时反馈、危险解释和 same retry 的完整闭环。
+**目标**: 用一个代表性场景验证 GuidancePlan、CoachState reducer、CoachFrame 呈现、MSS 控件高亮、即时反馈、危险解释和 same retry 的完整闭环。
 
 **实现范围**:
 
 - [ ] `src/content/guidance.ts`: Right on red 三个 variant 的 GuidancePlan 和中英文受控文案。
 - [ ] `src/content/validate.ts`: plan/variant/step/condition/MSS 顺序校验和坏数据 fixture。
-- [ ] `src/domain/guidance.ts`: `deriveCoachFrame()`、step window、opposite action、missed/feedback 去重。
+- [ ] `src/domain/guidance.ts`: `createCoachState()`、`reduceCoachState()`、`toCoachFrame()`、step window、opposite action、missed/feedback 去重。
 - [ ] `src/components/CoachPanel.tsx`: Prepare/Act/Feedback、步骤进度、动态键位、ARIA live polite、低动态样式。
 - [ ] `src/components/PracticeRoundSummary.tsx`: Retry same、Choose another；next variation 可先隐藏到 Phase 3。
 - [ ] `src/App.tsx` / `styles.css`: Practice-only Coach placement 和 action highlight；Exam 不渲染 Coach DOM。
@@ -683,7 +781,7 @@ Coach 与 driving status 正交：manual pause、页面隐藏和 modal 可以暂
 **数据 / migration 改动**:
 
 - [ ] 保存 practiceSessionId、roundIndex、retryOfAttemptId、guidanceSummary。
-- [ ] checkpoint 包含 RunConfig 和 Coach 可重建所需 action/plan version；不保存 DOM/presentation snapshot。
+- [ ] checkpoint 固化 `ResolvedRunConfig`、`AttemptRuntimeContext`、`CoachState` 和 plan version；可附带/复用 Engine 中的有序场景动作做恢复校验，但不保存 DOM 或 `CoachFrame` presentation snapshot。
 
 **Agent 执行约束**:
 
@@ -693,7 +791,7 @@ Coach 与 driving status 正交：manual pause、页面隐藏和 modal 可以暂
 
 **本阶段验证**:
 
-- 自动化测试: plan validation、step 激活/完成/过期、opposite direction、无关动作不误报、feedback pause、same retry、key remap、Exam DOM 无 Coach。
+- 自动化测试: plan validation、AND 条件和顺序语义、step 激活/完成/过期、opposite direction、无关动作不误报、`lastProcessedActionIndex` 去重、checkpoint replay、feedback pause、same retry、key remap、Exam DOM 无 Coach。
 - 手工 / workflow 验证: Mac 完成 `E -> C -> Shift+E -> D/Right -> brake -> turn`；手机触控完成同流程；提示不遮红绿灯、镜子、考官卡和小地图。
 - 回归检查: Right on red Exam 同 seed 前后 frame/action/finding fixture 相等；低动态和高对比可读。
 - 失败 / 边界检查: 提示前已做 mirror、快速连点、方向做反、步骤过期、危险后 retry、刷新恢复、Coach render error。
@@ -701,7 +799,7 @@ Coach 与 driving status 正交：manual pause、页面隐藏和 modal 可以暂
 **退出标准**:
 
 - [ ] 一个新用户不看外部说明能根据 Coach 完成 Right on red 并成功 same retry。
-- [ ] Coach/Engine/Scoring 的单向依赖由测试证明；Exam 无任何教学提示回归。
+- [ ] CoachState/Engine/Scoring 的单向依赖由测试证明；CoachFrame 不被持久化或用于推进；Exam 无任何教学提示回归。
 - [ ] Owner 确认桌面和手机提示密度、语气、MSS 顺序和危险解释可接受。
 
 ### Phase 3: 六类内容、完整路线与练习历史
@@ -722,7 +820,7 @@ Coach 与 driving status 正交：manual pause、页面隐藏和 modal 可以暂
 
 - [ ] contentVersion 随 GuidancePlan 进入内容契约后递增；旧报告继续读取已保存 findings。
 - [ ] 每个 round 独立 AttemptRecordV2；same/next retry 通过 practiceSessionId 关联。
-- [ ] findingContexts 在 Exam danger 后继续时按分界点固化。
+- [ ] `findings[].context` 在 Exam danger 后继续时按 `continuedAfterDangerAtSeconds` 分界固化；首次危险及此前 findings 保持 exam，之后为 practice。
 
 **Agent 执行约束**:
 
@@ -759,7 +857,7 @@ Coach 与 driving status 正交：manual pause、页面隐藏和 modal 可以暂
 **数据 / migration 改动**:
 
 - [ ] 用真实 1.0 本地数据 fixture 做升级/回滚 smoke；确认旧 History 和 checkpoint 策略。
-- [ ] 验证 v2 Practice record 在兼容回滚版本可读；必要时先发布 reader-only commit，再发布功能。
+- [ ] 验证保留 deprecated `runStage/state.stage` 的 v2 record/checkpoint 在 `ff4e573` 下 History、报告、导出和进行中 attempt resume 均可用；任一失败时先发布 reader-only 兼容 commit，再发布功能。
 
 **Agent 执行约束**:
 
@@ -785,7 +883,7 @@ Coach 与 driving status 正交：manual pause、页面隐藏和 modal 可以暂
 
 | 验收领域 | 验证内容 | 命令 / 方法 | 合并前是否必须 |
 |---|---|---|---|
-| 单元 / 组件 | RunConfig、route 等价、GuidancePlan、CoachFrame、retry、migration、History | `npm run test` | Yes |
+| 单元 / 组件 | RunConfig/runtime context、route 等价、GuidancePlan、CoachState/CoachFrame、retry、migration、History | `npm run test` | Yes |
 | 内容契约 | 六类/18 variant guidance coverage、MSS 顺序、typed conditions、文案/evidence | `npm run validate:content` | Yes |
 | 集成 / workflow | Input -> Engine -> Guidance -> UI 单向链；finding context；checkpoint 恢复 | `npm run check` | Yes |
 | 端到端 / 运维 | Exam、full Practice、scenario same/next、danger、Pages base | `npm run test:e2e` + Actions + 公开 smoke | Yes |
@@ -806,7 +904,7 @@ Coach 与 driving status 正交：manual pause、页面隐藏和 modal 可以暂
 
 **性能 / 规模检查**:
 
-- `deriveCoachFrame()` 在常规 tick 中不扫描全 attempt 历史；只读取当前 plan、当前场景动作和最新 finding，目标单次 <1 ms（开发机抽样，不上传指标）。
+- `reduceCoachState()` 只增量读取 `lastProcessedActionIndex` 之后的本场景动作，`toCoachFrame()` 只读取当前 plan/state/preferences；两者均不扫描全 attempt 历史，目标单次各 <1 ms（开发机抽样，不上传指标）。
 - Coach 不增加新的动画循环；仅状态变化重渲染，feedback 不用独立 60 FPS 定时器。
 - 18 plans 随静态 bundle 发布；gzip 增量应保持在可解释的小型文本范围，若首屏 chunk 明显增大则按路由 lazy load Practice 内容。
 - 20 分钟 full route 后 action/Coach record 不逐 tick增长；只保存输入边沿、step completion/miss 和 findings。
@@ -816,6 +914,7 @@ Coach 与 driving status 正交：manual pause、页面隐藏和 modal 可以暂
 - 1.0 preferences 和新 `Z/C` signal migration 继续生效。
 - 旧 attempt 报告、History、导出可用；legacy unknown 不被误算为 exam evidence。
 - 旧 checkpoint 能明确迁移则恢复；不能明确迁移则提供只读说明/放弃入口，不猜测。
+- v2 record/checkpoint 保留旧 `runStage/state.stage` 和既有必填字段；用 `ff4e573` fixture 明确验证 History、报告、导出和 resume，而不是只假设旧 reader 会忽略新增字段。
 - flag off 时 Exam 和旧 History 可独立工作。
 
 **失败注入 / 负向测试**:
@@ -829,7 +928,7 @@ Coach 与 driving status 正交：manual pause、页面隐藏和 modal 可以暂
 
 - 发布顺序: Phase 1–3 在 flag off/debug 下完成 -> `npm run check:release` -> 兼容 reader/rollback smoke -> 打开 Practice flag -> 推送 `main` -> Actions 部署 -> 公开 Pages full Practice + scenario retry + Exam smoke -> 更新 Phase 4 报告 -> 发布 `1.1.0`。
 - Feature flag / 配置开关: 代码内静态 `PRACTICE_MODE_ENABLED`；关闭时隐藏 Guided Practice 入口，但 v2 History reader 保持启用。不得用远程配置或 query 参数为公众绕过关闭状态。
-- 部署顺序: 单一 GitHub Pages 静态站，无后端顺序；若 v2 回滚不兼容，先部署 reader-only 兼容 commit，再部署功能 commit。
+- 部署顺序: 单一 GitHub Pages 静态站，无后端顺序；deprecated `runStage` 是直接回滚兼容的第一道保障，双版本 smoke 失败时再先部署 reader-only 兼容 commit、后部署功能 commit。
 - 发布期间监控: GitHub Actions、Pages asset 200、浏览器 console、真实操作、History migration 和 Network（无业务 API/遥测）；不增加远程用户监控。
 - 回滚步骤: 优先把 flag 关闭并重新发布最小热修；若引擎/存储有问题，`git revert` 功能 commit 到最近兼容 v2 reader 的版本。不得用强推或改写 tag。
 - 如果回滚，数据如何清理: 不删除、不降级写回 v2 数据。兼容 reader 保持 History/导出；需要修复时以新的 schema migration 前进，不调用 `indexedDB.deleteDatabase()`。
@@ -847,7 +946,7 @@ Coach 与 driving status 正交：manual pause、页面隐藏和 modal 可以暂
 | 无关动作被误报错误 | 用户被频繁打断、失去信任 | 仅 opposite/expired 纠正；速度微调 neutral | action matrix 单测 |
 | 相同条件重试不相同 | 用户无法验证改进 | 固化 seed/scenario/variant；重置纯函数深度测试 | before/after state fixture |
 | 练习历史污染弱项 | 重复同一场景被过度加权 | finding context、exam-first、practice fallback 标注 | mixed history fixtures |
-| v2 数据无法回滚 | 发布故障后 History 不可用 | reader-only 兼容层、flag 优先、双版本 smoke | 1.0/v2 rollback gate |
+| v2 数据无法回滚 | 发布故障后 History 或进行中练习不可用 | 保留 deprecated `runStage/state.stage` 与既有字段、reader-only 兼容层、flag 优先、双版本 smoke | 1.0/v2 rollback gate |
 | 内容维护成本增加 | 每个新 variant 都需 guidance | coverage validator、plan 可受控复用、禁止通用空提示 | build failure on missing coverage |
 | Coach 语音盖住考官 | 用户错过正式指令 | Coach 默认纯文本；考官 voice 唯一自动语音 | speech queue E2E/手工听测 |
 | 危险提示虚构后果 | 误导用户 | danger 只复用 scoring finding 的事实和风险表述 | finding provenance test |
@@ -864,13 +963,13 @@ Coach 与 driving status 正交：manual pause、页面隐藏和 modal 可以暂
 - [x] 明确 Exam/Practice 单引擎、同 seed 同路线和 Coach 只读边界。
 - [x] 明确 v1/v2 本地记录、checkpoint、弱项统计和回滚兼容策略。
 - [x] 明确六类/18 variants 内容覆盖、MSS 顺序和动态键位要求。
-- [ ] Owner 审阅 v0.1 后决定是否修订并收口为 Locked v1.0。
+- [x] Owner 已要求完成审阅和必要修订；本文已收口为 Locked v1.0，实现以本版本为基线。
 - [ ] 每个 Phase 到达退出标准时生成对应 test report，并由 Owner 接受或退回。
 - [ ] 实现若需要新增 gap/scan 输入、改变 Engine 事实或远程能力，先修订设计，不静默实现。
 
-## 11. Open Questions
+## 11. Open Questions（已关闭）
 
-截至 v0.1 没有阻塞实现的产品开放问题，以下内容作为待 Owner 审阅的建议实现基线：
+截至 v1.0 没有阻塞实现的产品开放问题，以下决策已锁定为实现基线：
 
 - Guided Practice 同时提供 full route 和六类 typical scenario；Exam 只提供 full route。
 - Practice 默认只有一种 guided 强度，不在 1.1 增加多档难度。
@@ -881,4 +980,4 @@ Coach 与 driving status 正交：manual pause、页面隐藏和 modal 可以暂
 - 新字段使用 record schemaVersion 2，但不升级/删除 IndexedDB object store。
 - 公开发布目标为 `1.1.0`，必须经过兼容 reader、flag、Pages 和 Owner smoke gate。
 
-Phase 2 和 Phase 3 的 Owner 教学验收是实施 gate，不是要求 Owner 在编码前补充的开放答案。若实现发现当前世界状态不足以支持某个提示，应新增 Open Question 并暂停相关场景，而不是编造交通事实。
+Phase 2 和 Phase 3 的 Owner 教学验收是实施 gate，不是要求 Owner 在编码前补充的开放答案。若实现发现当前世界状态不足以支持某个提示，应暂停相关场景并提交 v1.1+ 设计修订，不能在 Locked v1.0 下编造交通事实或静默扩大引擎契约。
