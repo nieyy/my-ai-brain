@@ -11,19 +11,19 @@
 - [Ontario G Test 引导式练习模式设计](2026-08-14-ontario-g-test-guided-practice-mode-design-zh.md)
 - [DriveTest 官方考点列表](https://drivetest.ca/find-a-drivetest-centre/find-a-drivetest-centre%20/)
 - [Town of Newmarket：Restricted Area for Driving Instructors and Schools](https://www.newmarket.ca/resident-services/by-law-enforcement/restricted-area-driving-instructors-driving-schools)
-- [OpenStreetMap Copyright and License](https://www.openstreetmap.org/copyright)
-- [Nominatim Usage Policy](https://operations.osmfoundation.org/policies/nominatim/)
 
 ## 修订记录
 
 | 版本 | 日期 | 作者 | 摘要 |
 |---|---|---|---|
 | v0.1 | 2026-08-16 | nieyuanyuan | 初版设计：定义 Newmarket 道路画像、动态车道拓扑、地图数据边界和四阶段实现验收计划。 |
+| v0.2 | 2026-08-16 | nieyuanyuan | 明确所有路线和道路几何默认采用教学近似，取消真实车道逐项核验及 Owner 内容门禁。 |
+| v0.3 | 2026-08-16 | nieyuanyuan | 在 6.1 补充道路画像架构与数据流说明图。 |
 
 ## 1. 摘要
 
 - **这个设计解决什么问题**: 当前游戏虽选择了 Newmarket 考点，但道路长期显示为固定三车道，左转专用车道、车道增减、匝道和出口等结构不清楚，考点选择与实际训练内容缺少可感知联系。
-- **选择的方向**: 保留现有 React、TypeScript 和 Canvas 2.5D 技术栈，引入内容驱动的 `CentreRoadProfile`、`RouteGraph` 和 `RoadSectionDefinition`。首个道路画像以 Newmarket 考点周边可核验道路事实为约束，用少量可复用道路断面拼成一条教学路线。
+- **选择的方向**: 保留现有 React、TypeScript 和 Canvas 2.5D 技术栈，引入内容驱动的 `CentreRoadProfile`、`RouteGraph` 和 `RoadSectionDefinition`。首个道路画像使用已确认的 Newmarket 考点及周边道路名称提供地域语境，所有路线顺序、车道布局和道路几何默认按 `authored-approximation` 创作。
 - **预期结果**: 用户在 Newmarket 训练中能自然经历停车场出口、工业道路、城市主干道、左转专用车道、信号灯路口、高速入口、主线和出口；道路变化由路线决定，而不是随机换皮。
 - **AI Agent 应该能根据本文直接实现什么**: 数据模型、验证器、道路帧生成器、基于 Canvas 的动态道路渲染、车道角色驱动的操作与评分、路线小地图、存档迁移、自动化测试及 GitHub Pages 发布验收。
 
@@ -45,13 +45,15 @@
 | Newmarket DriveTest Centre 地址为 `320 Harry Walker Parkway S, Newmarket, L3Y 7B4` | 官方 DriveTest | 道路画像的起终点语义和考点名称 |
 | Newmarket 的限制区域覆盖该考点使用的多条考试路线 | Town of Newmarket | 证明考试路线不应建模成唯一、固定、官方路线 |
 | 限制区域及边界涉及 Gorham Street、Prospect Street、Bayview Parkway、Traviss Drive、Leslie Valley Drive、Leslie Street，页面另列 Davis Drive 等允许教学的主要道路 | Town of Newmarket | 确定周边道路语境和候选道路类型，不直接推导精确路线 |
-| Harry Walker Parkway 周边与 Highway 404、城市主干道之间存在适合 G Test 教学的地方道路—主干道—高速转换语境 | 地图审阅待 Phase 1 固化 | 决定道路画像应覆盖的结构类型；具体连接、车道数和转向必须逐项核验 |
+
+基于 G Test 教学目标，画像将包含地方道路、城市主干道、左转袋形车道、高速入口、主线和出口等道路类型；这是产品设计决定，不是对真实考试路线的事实声明。
 
 以下内容不得表述为事实：
 
 - 不声称游戏路线是 DriveTest 官方路线、考试预测路线或某次考试的精确复现。
 - 不根据个人复盘或社区帖子推断固定行驶顺序、精确限速、车道数和信号相位。
-- 未经双重核验的道路结构标为 `authored-approximation`，界面展示“教学近似”，不伪装为 `verified`。
+- 考点地址和道路名称以公开来源为地域背景；所有路线顺序、道路断面、车道数、路口、限速参数和 Highway 404 出入口均默认标为 `authored-approximation`。
+- 首版不提供任何“精确对应真实路口”的道路几何，因此不需要 Owner 逐项批准道路细节。
 
 ### 2.3 痛点 / 动机
 
@@ -80,9 +82,9 @@
 ### 2.6 约束
 
 - 继续部署到 `https://nieyy.github.io/ontario-g-test/`，首屏和训练过程中不得依赖业务网络请求。
-- 地图事实必须离线整理为仓库内的小型数据文件；不得提交第三方瓦片、Street View 截图或受限素材。
-- 如使用 OpenStreetMap 派生数据，发布前必须确认 ODbL 归属、保留来源记录并在产品中提供清晰 attribution；不把许可证判断留给运行时。
-- 精确道路事实不充分时采用教学近似，不能由 Agent 自行补写坐标、车道数或限速。
+- 考点地址、道路名称和区域语境的公开来源必须离线记录在仓库内的小型数据文件；不得提交第三方瓦片、Street View 截图或受限素材。
+- 首版不复制或追踪 OpenStreetMap/Google Maps 的坐标和几何，也不提交地图截图或瓦片；地图只用于人工理解周边道路语境。
+- Agent 可以按教学需要创作车道数、转弯袋、匝道和限速参数，但必须标为 `authored-approximation`，且不得描述为现实道路事实。
 - Mac 桌面和手机横屏均需可辨识；动态道路不能牺牲既有键盘、触控和无障碍语义。
 
 ### 2.7 成功标准
@@ -105,7 +107,7 @@
 | `src/domain/engine.ts` | `lane: -1 | 0 | 1` 为驾驶状态 | 增加 `sectionId`、`sMeters`、`laneId`；旧整数只能作为短期兼容派生值 |
 | `src/content/types.ts` | 场景描述考试任务，缺少完整道路断面 | 新增道路画像类型；Scenario 通过 `routeBinding` 引用道路图，不复制几何 |
 | `src/content/data.ts` | 6 类、18 个场景变体 | 保留教学覆盖面，把场景落到具体道路段和决策区 |
-| `src/content/validate.ts` | 校验场景及内容版本 | 增加图连通、车道生命周期、转向合法性、证据等级和 attribution 校验 |
+| `src/content/validate.ts` | 校验场景及内容版本 | 增加图连通、车道生命周期、转向合法性、证据等级和来源声明校验 |
 | `src/components/RouteMiniMap.tsx` | 固定示意线和进度点 | 改为消费 RouteGraph 的简化几何及节点名称 |
 | `src/domain/coach.ts` | 根据 Engine facts 生成提示 | 新增车道角色事实；Coach 不读取 Canvas，也不能改变 RouteGraph |
 | checkpoint / localStorage | 保存当前训练进度和旧 lane | 车道主键变化需要 checkpoint v3 和明确的兼容/放弃策略 |
@@ -121,7 +123,7 @@
 
 ## 5. 选择
 
-**选择的方案**: 方案 A，以“参数化道路语法 + Newmarket 道路画像 + 离线事实审计”扩展现有 Canvas 2.5D。
+**选择的方案**: 方案 A，以“参数化道路语法 + Newmarket 教学近似道路画像 + 轻量来源记录”扩展现有 Canvas 2.5D。
 
 **为什么选它**:
 
@@ -160,11 +162,15 @@
   -> [Scoring]
   -> [Guided Practice Coach]
 
-[offline source review]
-  -> [evidence ledger]
-  -> [authored static profile]
+[offline context review]
+  -> [lightweight source ledger]
+  -> [authored-approximation static profile]
   -> [content validator]
 ```
+
+![Newmarket 道路画像架构与数据流](../research/assets/2026-08-16-newmarket-road-profile-architecture.png)
+
+图 1：道路画像、驾驶状态、道路帧和界面消费者的数据流。`DrivingEngine` 是车辆位置与车道状态的唯一真相来源；Scoring 和 Guided Practice Coach 只读取事实，不反向修改驾驶状态。底部链路表示真实名称只提供地域语境，道路几何统一作为 `authored-approximation` 进入内容校验。
 
 边界原则：
 
@@ -172,14 +178,13 @@
 2. `DrivingEngine` 是车辆位置、车道和动作结果的唯一真相来源。
 3. `RoadFrameBuilder` 只把 Engine 状态和静态内容转换为可绘制几何，不判分。
 4. Canvas、Coach 和 MiniMap 都是消费者，任何一个都不得保存独立的“当前车道”。
-5. 地图审阅只发生在内容制作阶段，浏览器运行时不得向地图服务请求数据。
+5. 地图只在内容制作阶段帮助理解地域语境；不得追踪或复制真实几何，浏览器运行时不得向地图服务请求数据。
 
 ### 6.2 数据 / 状态模型
 
 ```ts
 type EvidenceLevel =
-  | "verified-official"
-  | "verified-map"
+  | "verified-context"
   | "authored-approximation";
 
 type RoadSectionTemplate =
@@ -265,7 +270,7 @@ interface CentreRoadProfile {
   version: "1.0.0";
   displayName: string;
   disclaimer: string;
-  attribution: string[];
+  sourceNotices: string[];
   evidence: RoadEvidence[];
   sections: RoadSectionDefinition[];
   routes: RouteGraph[];
@@ -285,16 +290,16 @@ interface RoadPosition {
 
 | 顺序 | 教学路段 | 必须呈现的结构 | 事实标记策略 |
 |---|---|---|---|
-| 1 | DriveTest 起步与停车场出口 | 低速、停车线、左右观察、驶入道路 | 地址为官方事实；停车场细节需地图审阅，否则标教学近似 |
-| 2 | Harry Walker 风格工业/地方道路 | 双向道路、每方向一条主要车道、路边工业语境 | 街名/连接逐项核验；视觉装饰为教学近似 |
-| 3 | 城市信号灯路口 | 路口由远及近、停止线、交通灯、横向道路 | 路口位置和转向若未核验则不使用真实路口名 |
-| 4 | 左转袋形车道 | 同向道路扩宽、专用左转车道、箭头、实/虚线过渡 | 只有审计确认后才绑定真实路口；否则标教学近似 |
-| 5 | Davis/Leslie 风格城市主干道 | 多车道、较长直行、连续路口语境 | 道路名可核验，精确断面必须单独核验 |
-| 6 | Highway 404 入口和加速车道 | 弧形匝道、加速车道、汇入点、主线 gap | 匝道连接和方向需地图审阅；训练参数不声称等同现实 |
-| 7 | Highway 404 主线与出口 | 多车道主线、出口预告、减速车道、离开主线 | 高速语境可核验；具体考试出口不作承诺 |
+| 1 | DriveTest 起步与停车场出口 | 低速、停车线、左右观察、驶入道路 | 考点地址为事实；停车场结构全部为教学近似 |
+| 2 | Harry Walker 风格工业/地方道路 | 双向道路、每方向一条主要车道、路边工业语境 | 道路名称提供地域感；连接和断面为教学近似 |
+| 3 | 城市信号灯路口 | 路口由远及近、停止线、交通灯、横向道路 | 使用匿名训练路口，不暗示对应某个真实路口 |
+| 4 | 左转袋形车道 | 同向道路扩宽、专用左转车道、箭头、实/虚线过渡 | 按 G Test 教学目标创作，不绑定真实路口 |
+| 5 | Davis/Leslie 风格城市主干道 | 多车道、较长直行、连续路口语境 | 道路名称提供地域感；车道数和路口为教学近似 |
+| 6 | Highway 404 风格入口和加速车道 | 弧形匝道、加速车道、汇入点、主线 gap | 不指定或预测真实考试入口，训练参数为教学近似 |
+| 7 | Highway 404 风格主线与出口 | 多车道主线、出口预告、减速车道、离开主线 | 不指定或预测真实考试出口，训练参数为教学近似 |
 | 8 | 返回城市道路 | 车道减少、城市限速语境、回到考点终点 | 为 15–20 分钟教学闭环，可明确标教学路线 |
 
-道路数量变化必须源于上述路段：地方道路 1 条同向车道，主干道 2 条或经核验的更多车道，高速主线 3 条训练车道，左转/加速/出口车道按距离出现和结束。禁止为追求变化而随机改车道数。
+道路数量变化必须源于上述路段：地方道路 1 条同向车道、教学主干道 2 条、高速主线 3 条训练车道，左转/加速/出口车道按距离出现和结束。这些数字是教学参数，不代表相应真实道路的精确车道数；禁止为追求变化而随机改车道数。
 
 #### 车道生命周期与连接规则
 
@@ -327,7 +332,7 @@ interface RoadPosition {
 - URL 和 GitHub Pages 路径不变。
 - 考点选择 Newmarket 后加载 `newmarket-road-profile-v1`；界面显示“Newmarket-inspired training route / Newmarket 教学近似路线”免责声明。
 - 训练 HUD 动态显示当前道路类型、车道角色和下一个关键结构；考试模式只显示现实驾驶中合理的信息，不暴露答案。
-- About/页脚显示地图事实来源和适用 attribution。
+- About/页脚显示考点及道路名称来源，并明确几何为人工教学近似。
 
 #### 内部接口
 
@@ -348,8 +353,8 @@ getRouteMiniMap(routeId, profile): MiniMapModel;
 - 同一路段同方向车道在同一纵向范围内不得几何重叠。
 - lane transition 的输入输出必须在 `atM` 处存在，且不能指向 opposing lane。
 - 车道箭头必须与 `allowedMovements` 一致。
-- `verified-*` 内容必须有来源 URL、审阅日期和说明；`authored-approximation` 必须有用户可见免责声明。
-- 精确限速未核验时使用 `null` 并由教学场景提供明确的 authored limit，不能冒充道路事实。
+- `verified-context` 只允许用于考点地址、公开道路名称及区域语境，并且必须有来源 URL、审阅日期和说明。
+- 道路几何和训练参数必须是 `authored-approximation`，并有用户可见免责声明；教学限速可以明确给出，但不能冒充现实道路限速。
 
 #### 输出 / 错误形态
 
@@ -389,40 +394,40 @@ getRouteMiniMap(routeId, profile): MiniMapModel;
 
 > 实现和测试放在一起写。每个阶段都要具体到 AI Agent 可以实现、验证，并在阶段边界停下来，不需要临时发明范围。
 
-### Phase 1: 道路事实审计、数据模型与验证器
+### Phase 1: 教学道路画像、数据模型与验证器
 
-**目标**: 在不改变生产画面的前提下，建立可审计的 Newmarket 道路画像骨架和严格内容契约。
+**目标**: 在不改变生产画面的前提下，建立默认采用教学近似的 Newmarket 道路画像骨架和严格内容契约。
 
 **实现范围**:
 
 - [ ] 新增 `src/content/roadProfiles/types.ts`、`newmarket.ts`、`evidence.ts` 和 fixtures。
 - [ ] 新增 `src/content/roadProfiles/validate.ts`，实现 ID、图连通、车道生命周期、transition、箭头和证据等级校验。
-- [ ] 对候选道路逐项完成人工地图审阅表：道路名、路段类型、同向车道数、左转袋形车道、匝道/出口、观察日期、来源和信心水平。
+- [ ] 建立轻量来源记录：确认考点地址、可使用的道路名称和 Newmarket 周边道路语境；不记录、复制或声称精确车道数、路口和出入口。
 - [ ] 在 `src/content/types.ts` 增加 `routeBinding`，但 feature flag 默认关闭。
-- [ ] 在 About/README 准备教学近似声明与地图 attribution 文案。
+- [ ] 在 About/README 准备教学近似、非官方路线和公开名称来源文案。
 
 **数据 / migration 改动**:
 
 - [ ] 新增 `CentreRoadProfile v1.0.0`，不修改现有 checkpoint。
-- [ ] 未通过证据审计的具体路口使用匿名 training label 和 `authored-approximation`。
+- [ ] 所有具体路口、车道断面和出入口统一使用 training label 和 `authored-approximation`。
 
 **Agent 执行约束**:
 
-- **必须遵守**: 只提交可追溯的小型静态数据；每个 `verified-*` 字段都有证据引用；精确车道事实由截图/地图人工复核后才能锁定。
-- **禁止做**: 提交 Google 图片/瓦片；调用运行时地图 API；把社区路线当官方路线；根据道路名猜车道数或限速。
-- **不确定时先问**: ODbL attribution 是否满足项目发布方式；真实路口名称或车道结构证据冲突；需要保存第三方派生坐标时。
+- **必须遵守**: 只提交小型静态内容；`verified-context` 有公开来源；所有道路几何和训练参数明确为 `authored-approximation`。
+- **禁止做**: 提交或追踪地图图片、瓦片、坐标和几何；调用运行时地图 API；把社区路线当官方路线；宣称精确复刻真实路口、入口或出口。
+- **不确定时先问**: 需求要求引入真实坐标、第三方派生几何，或要求把某个场景描述为精确对应现实道路时。
 
 **本阶段验证**:
 
 - **自动化测试**: validator 正/反 fixtures；断链 graph、悬空 lane、非法 opposing transition、箭头不匹配、缺证据和重复 ID 均必须失败。
-- **手工 / workflow 验证**: Owner 审阅 evidence ledger，确认哪些内容可称为 verified、哪些必须标教学近似。
+- **手工 / workflow 验证**: 检查路线选择页、About 和训练界面均明确展示教学近似与非官方路线声明。
 - **回归检查**: feature flag 关闭时现有页面截图、输入、评分和保存行为不变。
-- **失败 / 边界检查**: profile 缺失、版本错误、空 route、单车道路段、道路事实未核验。
+- **失败 / 边界检查**: profile 缺失、版本错误、空 route、单车道路段、缺少教学近似标记、将几何误标为 `verified-context`。
 
 **退出标准**:
 
-- [ ] Newmarket profile 通过 validator，且没有无来源的 `verified-*` 内容。
-- [ ] Owner 接受路线免责声明、attribution 和首版道路断面清单。
+- [ ] Newmarket profile 通过 validator，且 `verified-context` 只包含有来源的名称和区域语境。
+- [ ] 全部路线、道路断面、车道数、路口和出入口均标记为 `authored-approximation`，产品已展示教学近似与非官方路线声明。
 - [ ] 既有测试全部通过，生产画面没有变化。
 
 ### Phase 2: 动态车道内核与左转路口垂直切片
@@ -482,9 +487,9 @@ getRouteMiniMap(routeId, profile): MiniMapModel;
 
 **Agent 执行约束**:
 
-- **必须遵守**: 车道数量变化由 profile 决定；真实道路名只用于通过审计的 segment；小地图与 Canvas 使用同一 RouteGraph。
+- **必须遵守**: 车道数量变化由 profile 决定；真实道路名只提供地域语境，几何保持教学近似；小地图与 Canvas 使用同一 RouteGraph。
 - **禁止做**: 为每个场景重新创建一份不一致道路；Coach 修改 RoadPosition；随机增减车道；把小地图标成官方考试路线。
-- **不确定时先问**: 某场景无法自然映射到已核验/教学近似路段；完整路线时长只能靠拉长无内容直路满足。
+- **不确定时先问**: 某场景无法自然映射到教学近似路段；完整路线时长只能靠拉长无内容直路满足。
 
 **本阶段验证**:
 
@@ -497,7 +502,7 @@ getRouteMiniMap(routeId, profile): MiniMapModel;
 
 - [ ] Newmarket 考点选择产生清楚、稳定、可重复的道路画像。
 - [ ] Exam、Guided Practice 和典型场景均通过端到端验收。
-- [ ] 页面无业务网络请求，路线和地图 attribution 可见。
+- [ ] 页面无业务网络请求，教学近似声明和公开名称来源可见。
 
 ### Phase 4: 发布硬化、公开验收与旧实现退场
 
@@ -507,13 +512,13 @@ getRouteMiniMap(routeId, profile): MiniMapModel;
 
 - [ ] 增加桌面与手机横屏关键帧视觉回归：地方道路、袋形左转、路口近景、匝道汇入、出口。
 - [ ] 增加 15–20 分钟完整路线 E2E、checkpoint v2/v3、feature flag 和回滚测试。
-- [ ] 更新 README、版本号、公开免责声明、attribution、操作说明和 release notes。
+- [ ] 更新 README、版本号、公开免责声明、来源声明、操作说明和 release notes。
 - [ ] 检查并删除 Phase 2/3 遗留的调试覆盖层、未使用兼容代码和占位道路数据。
 - [ ] 构建并发布 GitHub Pages，验证生产 URL 和静态资源 base path。
 
 **数据 / migration 改动**:
 
-- [ ] 锁定 `newmarket-road-profile-v1` 内容 hash 和 evidence ledger。
+- [ ] 锁定 `newmarket-road-profile-v1` 内容 hash 和轻量来源记录。
 - [ ] 保留 checkpoint v2 reader 一个发布周期；不得删除历史 AttemptRecord。
 
 **Agent 执行约束**:
@@ -526,7 +531,7 @@ getRouteMiniMap(routeId, profile): MiniMapModel;
 
 - **自动化测试**: lint、typecheck、unit/component、完整 Playwright、build、静态产物无意外外链请求；现有回归套件全部通过。
 - **手工 / workflow 验证**: Owner 在 Mac 完成一次 15–20 分钟 Exam smoke test，并在手机横屏完成 Guided Practice 关键场景；检查左转线、车道变化、路口接近、小地图和报告。
-- **回归检查**: GitHub Pages 刷新深链、音频解锁、键盘/触控、存档恢复、About/attribution、无控制台错误。
+- **回归检查**: GitHub Pages 刷新深链、音频解锁、键盘/触控、存档恢复、About/来源声明、无控制台错误。
 - **失败 / 边界检查**: 禁用 flag 回到旧实现；损坏 checkpoint；离线加载；窄屏；低帧率设备的降级表现。
 
 **退出标准**:
@@ -544,12 +549,12 @@ getRouteMiniMap(routeId, profile): MiniMapModel;
 | 端到端 / 运维 | 键盘/触控完成地方路—左转—高速—出口；公开 Pages smoke test | Playwright desktop/mobile + `https://nieyy.github.io/ontario-g-test/` | Yes |
 | 回归测试 | 既有 Exam/Guided Practice、评分、速度、音频、暂停、报告 | 全量既有测试套件 | Yes |
 | 回滚 / 兼容性 | flag 关闭、v2 checkpoint、旧报告可读 | migration fixtures + 手工回滚演练 | Yes |
-| 内容与许可 | evidence ledger、免责声明、attribution、零地图运行时请求 | 人工审阅 + 浏览器 Network 面板 | Yes |
+| 内容与许可 | 轻量来源记录、教学近似声明、非官方路线声明、零地图运行时请求 | 人工审阅 + 浏览器 Network 面板 | Yes |
 
 **必要测试数据 / fixtures**:
 
 - 合法的 Newmarket 完整 profile 和每类 RoadSection 最小 fixture。
-- 断链 route、悬空 lane、无 transition 的车道结束、非法对向变道、错误箭头、缺证据的 verified content。
+- 断链 route、悬空 lane、无 transition 的车道结束、非法对向变道、错误箭头、把道路几何误标为 `verified-context` 的内容。
 - v2 可迁移、v2 不可迁移、v3 正常和损坏 checkpoint。
 - 固定输入序列：地方路行驶、进入左转袋、完成转弯、匝道加速汇入、进入出口车道、错过出口。
 
@@ -567,7 +572,7 @@ getRouteMiniMap(routeId, profile): MiniMapModel;
 
 **失败注入 / 负向测试**:
 
-- 删除 section、lane 或 evidence 引用，构建必须失败。
+- 删除 section、lane 或来源引用，或把几何误标为 `verified-context`，构建必须失败。
 - 在车道开始前/结束后请求变道、从 opposing lane 请求 transition、在错误车道转弯，Engine 必须拒绝且画面不移动。
 - 模拟 Canvas context 丢失、小地图模型异常和 localStorage 损坏，提供可恢复降级。
 - 阻断网络后完整训练仍可运行；若训练请求地图域名则验收失败。
@@ -586,11 +591,11 @@ getRouteMiniMap(routeId, profile): MiniMapModel;
 | 风险 | 影响 | 缓解方式 | 测试 / 信号 |
 |---|---|---|---|
 | 把教学路线误解成官方考试路线 | 误导考生、损害可信度 | 全程使用 “Newmarket-inspired / 教学近似”，记录证据等级，不提供路线预测 | 文案审阅、About 和路线选择页检查 |
-| 地图数据许可不清 | 无法安全发布 | 优先使用官方公开事实和人工 authored 结构；OSM 派生内容保留 attribution 和来源，发布设许可门禁 | evidence ledger、Network/仓库资产审计 |
+| 地图数据许可不清 | 无法安全发布 | 首版不复制/追踪第三方地图几何或素材，只保存公开名称来源和人工 authored 结构 | 来源记录、Network/仓库资产审计 |
 | 车道状态与画面再次脱节 | 核心交互失真 | Engine 单一真相、稳定 laneId、RoadFrame 单一路径、禁止屏幕偏移伪装 | 输入重放、截图关键帧、状态覆盖层 |
 | 路段连接产生漂浮标线或跳变 | 视觉诡异、无法判断路口距离 | 统一世界坐标、切片裁剪、transition 几何规则、near-plane 测试 | geometry tests、由远及近 E2E |
 | 内容模型过度复杂 | 延期且难维护 | 首版只做 7 类模板和一条教学走廊，不做通用地图编辑器 | 代码规模审阅、Phase 边界 |
-| 真实道路事实发生变化 | 内容过时 | profile 版本化，证据记录观察日期；不宣称实时地图 | 发布复核清单、过期提示 |
+| 真实道路发生变化 | 地域语境可能过时 | profile 版本化，来源记录观察日期；道路几何始终声明为教学近似，不宣称实时地图 | 发布复核清单、过期提示 |
 | checkpoint v2 无法安全迁移 | 用户当前进度中断 | 历史保留、仅无歧义迁移、明确提示开始新驾驶 | migration fixtures |
 | 手机性能或可读性不足 | 目标用户无法使用 | 可见范围切片、装饰降级、动态文字摘要和手机横屏验收 | mobile E2E、性能记录 |
 
@@ -607,8 +612,6 @@ getRouteMiniMap(routeId, profile): MiniMapModel;
 
 ## 11. Open Questions
 
-- [ ] **Phase 1 内容门禁**: 精确绑定到真实道路名的断面、车道数、左转袋形车道和 Highway 404 出入口，须完成 evidence ledger 后由 Owner 确认；证据不足的项目自动降级为匿名 `authored-approximation`，不阻塞首版教学路线。
-- [ ] **Phase 1 许可门禁**: 若提交任何 OSM 派生几何，由 Owner 确认 attribution 展示和 ODbL 合规方式；若无法确认，则仅保留官方道路名称事实和人工绘制的非精确教学几何。
 - [ ] **Phase 2 视觉门禁**: Owner 在 Mac 与手机横屏确认左转袋形车道、车道增减、停止线和信号灯无需文字解释也能正确辨识。
 - [ ] **Phase 3 教学门禁**: Owner 确认完整走廊的结构变化服务 G Test 规则训练，而不是为了展示技术随意增加道路变化。
 - [ ] **Phase 4 发布门禁**: Owner 完成公开站点 15–20 分钟 smoke test 后，文档从 Draft 收口为 Locked v1.0，产品才能标记为 1.2.0。
