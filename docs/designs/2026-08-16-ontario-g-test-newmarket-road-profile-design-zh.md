@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-16
 **Owner**: nieyuanyuan
-**状态**: Draft
+**状态**: Locked
 **源项目 / 分支**: `nieyy/ontario-g-test / main @ 6ebd9b4`
 **相关调研 / 代码讲解 / review**:
 
@@ -19,6 +19,8 @@
 | v0.1 | 2026-08-16 | nieyuanyuan | 初版设计：定义 Newmarket 道路画像、动态车道拓扑、地图数据边界和四阶段实现验收计划。 |
 | v0.2 | 2026-08-16 | nieyuanyuan | 明确所有路线和道路几何默认采用教学近似，取消真实车道逐项核验及 Owner 内容门禁。 |
 | v0.3 | 2026-08-16 | nieyuanyuan | 在 6.1 补充道路画像架构与数据流说明图。 |
+| v0.4 | 2026-08-16 | nieyuanyuan | 将已确定的视觉、教学和发布检查归入对应 Phase 退出标准，清空 Open Questions。 |
+| v1.0 | 2026-08-16 | nieyuanyuan | 正式版收口：补齐中心线、车道横向位置、分段标线、箭头位置、渐变过渡和路口契约；明确 Vite feature flag、迁移、测试命令、发布门禁并锁定实现范围。 |
 
 ## 1. 摘要
 
@@ -40,7 +42,7 @@
 
 ### 2.2 已核验事实与事实边界
 
-| 事实 | 证据等级 | 设计用途 |
+| 事实 | 公开来源 | 设计用途 |
 |---|---|---|
 | Newmarket DriveTest Centre 地址为 `320 Harry Walker Parkway S, Newmarket, L3Y 7B4` | 官方 DriveTest | 道路画像的起终点语义和考点名称 |
 | Newmarket 的限制区域覆盖该考点使用的多条考试路线 | Town of Newmarket | 证明考试路线不应建模成唯一、固定、官方路线 |
@@ -104,10 +106,10 @@
 |---|---|---|
 | `src/components/CanvasRoadScene.tsx` | 固定道路几何和三条同向车道；有相机和世界坐标基础 | 保留 Canvas，拆出道路帧生成；禁止继续用 CSS/Canvas 偏移伪装变道 |
 | `src/domain/roadGeometry.ts` | 提供投影和道路几何辅助 | 扩展为路线局部坐标、道路切片、车道边界和路口裁剪的唯一几何来源 |
-| `src/domain/engine.ts` | `lane: -1 | 0 | 1` 为驾驶状态 | 增加 `sectionId`、`sMeters`、`laneId`；旧整数只能作为短期兼容派生值 |
+| `src/domain/engine.ts` | `lane: -1 | 0 | 1` 为驾驶状态 | 增加 `routeId`、`edgeId`、`sectionId`、`sMeters`、`laneId`；旧整数只能作为短期兼容派生值 |
 | `src/content/types.ts` | 场景描述考试任务，缺少完整道路断面 | 新增道路画像类型；Scenario 通过 `routeBinding` 引用道路图，不复制几何 |
 | `src/content/data.ts` | 6 类、18 个场景变体 | 保留教学覆盖面，把场景落到具体道路段和决策区 |
-| `src/content/validate.ts` | 校验场景及内容版本 | 增加图连通、车道生命周期、转向合法性、证据等级和来源声明校验 |
+| `src/content/validate.ts` | 校验场景及内容版本 | 增加图连通、车道生命周期、转向合法性、来源分类和声明校验 |
 | `src/components/RouteMiniMap.tsx` | 固定示意线和进度点 | 改为消费 RouteGraph 的简化几何及节点名称 |
 | `src/domain/coach.ts` | 根据 Engine facts 生成提示 | 新增车道角色事实；Coach 不读取 Canvas，也不能改变 RouteGraph |
 | checkpoint / localStorage | 保存当前训练进度和旧 lane | 车道主键变化需要 checkpoint v3 和明确的兼容/放弃策略 |
@@ -130,7 +132,7 @@
 - 当前最需要解决的是车道结构和交互状态一致性，不是提高纹理精度。
 - 现有相机、世界坐标、输入、评分和 Pages 部署可以继续使用，重构范围可控。
 - 7 类道路断面已经足以让 Newmarket 选择产生明确训练意义，也能复用于未来其他考点。
-- 所有路线和证据可进入代码审查与测试，不依赖外部服务变化。
+- 所有路线和来源记录可进入代码审查与测试，不依赖外部服务变化。
 
 **为什么不选其他方案**:
 
@@ -141,7 +143,7 @@
 **后果 / 取舍**:
 
 - **什么会变简单**: 新增路段、考点和车道角色；验证“画面是否对应状态”；复用道路结构；解释引导提示。
-- **什么会变困难**: 内容制作需要证据审计；道路断面连接和近裁剪必须有系统测试；旧存档不能无条件恢复。
+- **什么会变困难**: 公开名称需要维护轻量来源记录；道路断面连接和近裁剪必须有系统测试；旧存档不能无条件恢复。
 - **可能引出的后续决策**: 是否制作第二个考点画像；是否引入更多装饰资产；是否提供教学路线编辑器。这些都不属于本设计。
 
 ## 6. 详细设计
@@ -151,7 +153,7 @@
 ```text
 [Centre selection + mode + scenario seed]
   -> [CentreRoadProfile / RouteGraph / Scenario routeBinding]
-  -> [DrivingEngine: sectionId + sMeters + laneId]
+  -> [DrivingEngine: routeId + edgeId + sectionId + sMeters + laneId]
   -> [RoadFrameBuilder: visible road slices + lane transitions + intersections]
   -> [CanvasRoadScene]
        -> road surface / markings / arrows / signals / scenery
@@ -170,7 +172,7 @@
 
 ![Newmarket 道路画像架构与数据流](../research/assets/2026-08-16-newmarket-road-profile-architecture.png)
 
-图 1：道路画像、驾驶状态、道路帧和界面消费者的数据流。`DrivingEngine` 是车辆位置与车道状态的唯一真相来源；Scoring 和 Guided Practice Coach 只读取事实，不反向修改驾驶状态。底部链路表示真实名称只提供地域语境，道路几何统一作为 `authored-approximation` 进入内容校验。
+图 1：道路画像、驾驶状态、道路帧和界面消费者的数据流。图中状态字段为简写，完整 `RoadPosition` 还包含当前 route edge。`DrivingEngine` 是车辆位置与车道状态的唯一真相来源；Scoring 和 Guided Practice Coach 只读取事实，不反向修改驾驶状态。底部链路表示真实名称只提供地域语境，道路几何统一作为 `authored-approximation` 进入内容校验。
 
 边界原则：
 
@@ -183,7 +185,7 @@
 ### 6.2 数据 / 状态模型
 
 ```ts
-type EvidenceLevel =
+type SourceKind =
   | "verified-context"
   | "authored-approximation";
 
@@ -202,10 +204,11 @@ type LaneRole =
   | "right-turn"
   | "merge"
   | "exit"
-  | "parking-access"
-  | "opposing";
+  | "parking-access";
 
-type LaneBoundary =
+type Movement = "continue" | "left" | "right" | "merge" | "exit";
+
+type LaneBoundaryMarking =
   | "none"
   | "dashed-white"
   | "solid-white"
@@ -213,29 +216,72 @@ type LaneBoundary =
   | "double-yellow"
   | "curb";
 
+interface BoundarySegment {
+  fromM: number;
+  toM: number;
+  marking: LaneBoundaryMarking;
+}
+
+interface LaneArrow {
+  atM: number;
+  movement: "straight" | "left" | "right";
+}
+
+interface CenterlinePoint {
+  sM: number;
+  xM: number;
+  zM: number;
+}
+
+interface LaneOffsetPoint {
+  sM: number;
+  centerOffsetM: number;
+}
+
 interface LaneDefinition {
   id: string;
   direction: "forward" | "opposing";
   role: LaneRole;
   widthM: number;
+  offsetProfile: LaneOffsetPoint[];
   startsAtM: number;
   endsAtM: number;
-  leftBoundary: LaneBoundary;
-  rightBoundary: LaneBoundary;
-  arrows: Array<"straight" | "left" | "right">;
-  allowedMovements: Array<"continue" | "left" | "right" | "merge" | "exit">;
+  leftBoundary: BoundarySegment[];
+  rightBoundary: BoundarySegment[];
+  arrows: LaneArrow[];
+  allowedMovements: Movement[];
 }
 
 interface LaneTransition {
+  id: string;
   atM: number;
-  kind: "continue" | "split" | "merge" | "turn";
+  taperLengthM: number;
+  kind: "split" | "merge";
   fromLaneIds: string[];
   toLaneIds: string[];
 }
 
-interface RoadEvidence {
+interface IntersectionDefinition {
+  atM: number;
+  control: "traffic-signal" | "stop-sign" | "uncontrolled";
+  crossRoadWidthM: number;
+  stopLineBeforeM: number;
+}
+
+interface RouteMovement {
   id: string;
-  level: EvidenceLevel;
+  fromEdgeId: string;
+  fromLaneId: string;
+  movement: Movement;
+  toEdgeId: string;
+  toLaneId: string;
+  headingDeltaDeg: number;
+  connectorLengthM: number;
+}
+
+interface RoadSourceRecord {
+  id: string;
+  kind: SourceKind;
   sourceUrl?: string;
   observedAt: string;
   supports: string[];
@@ -248,12 +294,13 @@ interface RoadSectionDefinition {
   displayName: string;
   trainingLabel: string;
   lengthM: number;
-  speedLimitKph: number | null;
+  speedLimitKph: number;
+  centerline: CenterlinePoint[];
   lanes: LaneDefinition[];
   transitions: LaneTransition[];
   intersection?: IntersectionDefinition;
-  evidenceRefs: string[];
-  fidelity: EvidenceLevel;
+  sourceRefs: string[];
+  fidelity: "authored-approximation";
 }
 
 interface RouteEdge {
@@ -264,6 +311,22 @@ interface RouteEdge {
   miniMapPath: Array<{ x: number; y: number }>;
 }
 
+interface RouteNode {
+  id: string;
+  kind: "start" | "junction" | "end";
+  label: string;
+}
+
+interface RouteGraph {
+  id: string;
+  startNodeId: string;
+  endNodeId: string;
+  nodes: RouteNode[];
+  edges: RouteEdge[];
+  movements: RouteMovement[];
+  traversalEdgeIds: string[];
+}
+
 interface CentreRoadProfile {
   id: string;
   centreId: "newmarket";
@@ -271,18 +334,26 @@ interface CentreRoadProfile {
   displayName: string;
   disclaimer: string;
   sourceNotices: string[];
-  evidence: RoadEvidence[];
+  sources: RoadSourceRecord[];
   sections: RoadSectionDefinition[];
   routes: RouteGraph[];
 }
 
 interface RoadPosition {
   routeId: string;
+  edgeId: string;
   sectionId: string;
   sMeters: number;
   laneId: string;
 }
 ```
+
+静态与动态事实的所有权锁定如下：
+
+- `CentreRoadProfile` 负责道路中心线、车道、标线、路口控制类型、教学限速和合法 movement。
+- `ScenarioVariant` 继续负责考官指令、当前信号灯状态、gap/冲突车辆和评分目标，不复制道路几何。
+- `DrivingEngine` 把两者解析为当前可观察事实和动作结果；Canvas、Scoring、Coach 只读取解析结果。
+- 现有 Scenario 中与道路重复的 lane/limit 字段在兼容期内仅由 RoadProfile 单向派生，不允许两处分别维护。
 
 #### Newmarket v1 道路画像
 
@@ -303,9 +374,13 @@ interface RoadPosition {
 
 #### 车道生命周期与连接规则
 
-- 每条车道必须有稳定 `laneId`；画面、Engine、评分和提示均使用同一 ID。
-- `startsAtM`/`endsAtM` 不得孤立存在，必须有对应 `split`、`merge`、`turn` 或路段边界 transition。
-- 车辆位置为 `sectionId + sMeters + laneId`；路段切换时必须通过 `LaneTransition` 映射到下一车道。
+- section、edge、lane 和 transition ID 在整个 profile 内分别唯一；画面、Engine、评分和提示使用同一 `laneId`。
+- 道路局部坐标统一为 `+z` 向前、`+x` 向驾驶员右侧；正 heading/steering 表示右转，负值表示左转，Canvas/CSS 不得另行反转符号。
+- `centerline` 使用人工创作的局部米制坐标，`sM` 严格递增并覆盖 `0..lengthM`；弯道和匝道只由该中心线驱动，edge 之间的转向由 `RouteMovement.headingDeltaDeg` 和 `connectorLengthM` 驱动。
+- `offsetProfile` 定义车道中心相对道路中心线的分段位置，正值在右侧、负值在左侧，并以 `sM` 线性插值；这允许转弯袋和匝道自然分离。当前位置存在的同向车道按插值后的 offset 排序并推导相邻关系，不另存一份易失真的 left/centre/right 状态。
+- `LaneTransition.atM` 表示渐变开始，渐变区间为 `[atM, atM + taperLengthM]`：split 的目标车道从零宽增长到 `widthM`，merge 的来源车道从 `widthM` 收窄到零。对应 `startsAtM`/`endsAtM` 不得孤立存在，路段边界则必须有 `RouteMovement`。
+- 左右边界的 `BoundarySegment[]` 必须连续覆盖车道生命周期，才能表达变道区虚线、禁止区实线和路缘；箭头的 `atM` 必须落在车道生命周期内且与 allowed movement 一致。
+- 车辆位置为 `routeId + edgeId + sectionId + sMeters + laneId`；`LaneTransition` 只处理当前 section 内的车道 split/merge，切换到下一 edge 必须通过 `RouteMovement` 映射目标车道。
 - 变道只选择当前位置可达的相邻 forward lane。对向车道、实线隔离、已经结束的车道和非相邻车道不可选。
 - “左/中/右”仅为屏幕上基于当前断面的相对描述，不再是持久状态。
 - 左转动作只有在车道 `allowedMovements` 包含 `left` 且进入路口 decision zone 后才有效。
@@ -320,10 +395,12 @@ interface RoadPosition {
 #### 迁移 / 回填 / 兼容性
 
 - 应用目标版本：`1.2.0`；道路内容版本：`1.2.0`；`CentreRoadProfile.version` 独立从 `1.0.0` 开始。
-- checkpoint 升级为 v3，保存 `RoadPosition`、profile ID/version 和 route seed。
+- checkpoint 升级为 schema v3，保存 `RoadPosition`、profile ID/version 和 route seed；IndexedDB database version 及 `attempts`/`checkpoints` object store 不变。
 - v2 checkpoint 只有在当前场景能无歧义映射到兼容三车道路段时才迁移；否则显示“旧驾驶无法继续，但历史记录仍保留”，由用户确认后开始新驾驶。
-- 已完成的 AttemptRecord 和训练报告继续可读；新增 `roadProfileId`、`routeId`、`sectionIds` 为可选字段。
-- 一个发布周期内可保留由 `laneId` 派生的 legacy lane index 供旧组件读取，但禁止写回或作为判分依据。
+- AttemptRecord 继续使用 schema v2，新增 `roadProfileId`、`routeId`、`sectionIds` 为可选字段，因此既有 History 和旧版本 reader 可忽略新字段。
+- 为支持回滚到 1.1，一个发布周期内的 v3 checkpoint 同时保留 deprecated `state.route`、`state.stage`、`state.lane` 和既有场景推进字段；这些字段从新状态单向派生，禁止作为 1.2 的判分或道路渲染依据。
+- `scenarioDistanceMeters` 等旧距离字段同样只作回滚镜像，路段推进的唯一来源是 `RoadPosition`。兼容期结束前不得删除这些字段或对应 fixture。
+- 无法迁移或损坏的 checkpoint 不自动删除；用户可以放弃当前驾驶，但已完成 AttemptRecord 永远保留。
 
 ### 6.3 API / CLI / 接口变更
 
@@ -348,11 +425,17 @@ getRouteMiniMap(routeId, profile): MiniMapModel;
 
 #### 输入校验
 
-- 所有引用 ID 必须存在且在 profile 内唯一。
-- RouteGraph 从起点到终点必须连通；每条 edge 对应存在的 section。
-- 同一路段同方向车道在同一纵向范围内不得几何重叠。
-- lane transition 的输入输出必须在 `atM` 处存在，且不能指向 opposing lane。
-- 车道箭头必须与 `allowedMovements` 一致。
+- section、route、node、edge、lane、transition、route movement 和 source record ID 必须在各自命名空间内唯一，所有引用必须存在。
+- 所有数值必须是有限数；长度和宽度必须大于 0，`sM`、`atM` 和其他距离不得为负；局部/小地图坐标、车道 offset 和 heading delta 可以为负。
+- RouteGraph 从起点到终点必须连通；`traversalEdgeIds` 中的 edge 首尾节点连续，第一/最后节点分别匹配 start/end，且每条 edge 对应存在的 section。
+- 每条 edge 的 `miniMapPath` 至少包含两个有限坐标点；相邻 traversal edge 的小地图端点必须在容差内衔接，避免小地图跳跃。
+- section centerline 的 `sM` 严格递增、首尾覆盖 `0..lengthM`，相邻点不得重合；lane `offsetProfile.sM` 同样严格递增并覆盖其生命周期。按 taper 插值后的有效宽度和 offset 检查，在同一纵向范围内不得让任何两条车道几何重叠。
+- 每条车道的左右 `BoundarySegment[]` 必须无空洞、无重叠地覆盖 `startsAtM..endsAtM`；标线类型必须适用于对应方向和道路边缘。
+- lane transition 的输入输出必须属于同一 section；`taperLengthM` 必须大于 0，`atM + taperLengthM` 不得越过 section。split 目标车道从 `atM` 开始，merge 来源车道在渐变终点结束；transition 不能把 forward lane 连接到 opposing lane。
+- `RouteMovement` 的 from/to edge 和 lane 必须存在、分别属于对应 edge 的 section、方向一致且 movement 被来源车道允许；连续 traversal edge 之间必须至少有一个合法 movement。`connectorLengthM` 必须大于 0；left 的 `headingDeltaDeg < 0`、right 的 `headingDeltaDeg > 0`、continue 的 `headingDeltaDeg = 0`，merge/exit 只要求有限并与人工连接线方向一致。
+- 停止线和路口范围必须落在 section 内；具有 left/right RouteMovement 的受控 junction 必须有对应 IntersectionDefinition。
+- 车道箭头位置必须位于车道生命周期内，并与 `allowedMovements` 一致：`straight` 映射 `continue`，`left`/`right` 同名映射。
+- `speedLimitKph` 必须为 10–110 之间的整数教学参数；当前 HUD 和限速评分只读取 RoadProfile 解析值。
 - `verified-context` 只允许用于考点地址、公开道路名称及区域语境，并且必须有来源 URL、审阅日期和说明。
 - 道路几何和训练参数必须是 `authored-approximation`，并有用户可见免责声明；教学限速可以明确给出，但不能冒充现实道路限速。
 
@@ -366,8 +449,8 @@ getRouteMiniMap(routeId, profile): MiniMapModel;
 
 | 流程 | 入口 | 步骤 | 结果 |
 |---|---|---|---|
-| 开始 Newmarket 训练 | 选择考点、模式和路线 | 解析 profile → 选择 RouteGraph → 创建 RoadPosition → 建第一帧 | 主视图、小地图、引导和评分共享同一路线 |
-| 接近左转袋形车道 | 车辆进入 split 前的预告范围 | 绘制逐渐扩宽的道路 → 新车道从 transition 出现 → 箭头和边界进入视野 → 开放相邻变道 | 用户能看见并进入真实存在的左转车道 |
+| 开始 Newmarket 训练 | 选择考点、模式和路线 | 解析 profile → 按 ID 稳定排序候选 RouteGraph → 用既有 seeded RNG 选择路线 → 创建 RoadPosition → 建第一帧 | 相同 profile version、配置和 seed 必然得到同一路线；主视图、小地图、引导和评分共享该路线 |
+| 接近左转袋形车道 | 车辆进入 split 前的预告范围 | 绘制逐渐扩宽的道路 → 新车道从 transition 出现 → 箭头和边界进入视野 → 开放相邻变道 | 用户能看见并进入场景中实际存在的左转车道 |
 | 执行变道 | 键盘或触控请求相邻车道 | Engine 校验相邻关系和边界 → 建立 lane-change transition → 相机相对道路中心线平滑横移 → 完成后更新 laneId | 方向盘只在过渡期间偏转，车道与视角同步 |
 | 通过信号灯路口 | 距离随速度减少 | 同一世界坐标投影让停止线、横向道路和信号灯由远及近 → decision zone 开放转向 → 转弯后进入目标 section/lane | 不再出现漂浮白线或固定在车前的路口 |
 | 高速汇入 | 进入 on-ramp | 弯道 → 加速车道 → gap 判断 → merge transition → 主线 laneId | 视觉结构和汇入评分使用同一 transition |
@@ -387,8 +470,8 @@ getRouteMiniMap(routeId, profile): MiniMapModel;
 - **日志**: 仅开发模式输出结构化事件：profile load、section enter、lane transition、intersection zone、migration result、geometry invariant failure。不得记录个人信息或上传日志。
 - **指标**: MVP 不收集匿名遥测。测试报告记录 bundle 大小、关键帧计算耗时和自动化结果。
 - **告警**: 无后端告警；GitHub Actions 构建、测试和 Pages deployment failure 为发布信号。
-- **调试命令 / 查询**: 提供开发页或 query flag，显示 `routeId / sectionId / sMeters / laneId / laneRole / availableActions`，生产默认关闭。
-- **回滚 / 禁用开关**: `NEWMARKET_ROAD_PROFILE_ENABLED` 构建开关；关闭后回到 v1.1 固定场景兼容路径。开关仅作一个版本的迁移保险，不形成长期双实现。
+- **调试命令 / 查询**: 提供开发页或 query flag，显示 `routeId / edgeId / sectionId / sMeters / laneId / laneRole / availableActions`，生产默认关闭。
+- **回滚 / 禁用开关**: 使用 Vite 构建变量 `VITE_NEWMARKET_ROAD_PROFILE_ENABLED`，仅字符串值 `"true"` 启用；未设置或其他值均关闭并回到 v1.1 固定场景兼容路径。该开关在构建时固化，切换后必须重新部署；只保留一个发布周期，不形成长期双实现。
 
 ## 7. 分阶段实现与验证计划
 
@@ -400,8 +483,9 @@ getRouteMiniMap(routeId, profile): MiniMapModel;
 
 **实现范围**:
 
-- [ ] 新增 `src/content/roadProfiles/types.ts`、`newmarket.ts`、`evidence.ts` 和 fixtures。
-- [ ] 新增 `src/content/roadProfiles/validate.ts`，实现 ID、图连通、车道生命周期、transition、箭头和证据等级校验。
+- [ ] 新增 `src/content/roadProfiles/types.ts`、`newmarket.ts`、`sources.ts` 和 fixtures。
+- [ ] 新增 `src/content/roadProfiles/validate.ts`，实现 ID、图/遍历连通、中心线、车道生命周期、横向位置、分段标线、lane transition、route movement、路口、箭头和来源分类校验。
+- [ ] 新增 `src/config/featureFlags.ts`，集中解析 `VITE_NEWMARKET_ROAD_PROFILE_ENABLED === "true"`，组件不得各自读取环境变量。
 - [ ] 建立轻量来源记录：确认考点地址、可使用的道路名称和 Newmarket 周边道路语境；不记录、复制或声称精确车道数、路口和出入口。
 - [ ] 在 `src/content/types.ts` 增加 `routeBinding`，但 feature flag 默认关闭。
 - [ ] 在 About/README 准备教学近似、非官方路线和公开名称来源文案。
@@ -419,7 +503,7 @@ getRouteMiniMap(routeId, profile): MiniMapModel;
 
 **本阶段验证**:
 
-- **自动化测试**: validator 正/反 fixtures；断链 graph、悬空 lane、非法 opposing transition、箭头不匹配、缺证据和重复 ID 均必须失败。
+- **自动化测试**: validator 正/反 fixtures；断链 graph、错误 traversal、异常 centerline、重叠 lane、标线空洞、非法 opposing transition、错误 taper、RouteMovement 悬空/跨错 section、缺路口定义、箭头不匹配、缺来源和重复 ID 均必须失败；feature flag 对 `"true"`/`"false"`/未设置的解析有独立测试。
 - **手工 / workflow 验证**: 检查路线选择页、About 和训练界面均明确展示教学近似与非官方路线声明。
 - **回归检查**: feature flag 关闭时现有页面截图、输入、评分和保存行为不变。
 - **失败 / 边界检查**: profile 缺失、版本错误、空 route、单车道路段、缺少教学近似标记、将几何误标为 `verified-context`。
@@ -440,13 +524,15 @@ getRouteMiniMap(routeId, profile): MiniMapModel;
 - [ ] 扩展 `src/domain/roadGeometry.ts`，新增 route-local 坐标、道路切片、车道边界、路口裁剪和 near-plane 规则。
 - [ ] 新增 `src/domain/roadFrame.ts`，成为 Canvas 所有道路面、标线、箭头和信号设施的几何来源。
 - [ ] 重构 `CanvasRoadScene.tsx`，绘制动态车道数、袋形左转车道、方向箭头、停止线和由远及近的信号灯路口。
+- [ ] 更新 `src/App.tsx`，让 Player 控件和 HUD 只消费 Engine 提供的 `RoadPosition`、可用动作和 road facts。
+- [ ] 更新 `src/content/types.ts`、`src/services/storage.ts` 及其测试，加入 checkpoint schema v3 和兼容 reader/writer。
 - [ ] 动态生成可用车道操作和标签，例如“Move left to left-turn lane”，不再永久显示 Left/Centre/Right。
-- [ ] 方向盘仅跟随进行中的 lane-change/turn transition，并限制到视觉合理角度，完成后回正。
+- [ ] 方向盘仅跟随进行中的 lane-change/turn transition，严格遵循“右为正、左为负”，限制到视觉合理角度并在完成后回正。
 
 **数据 / migration 改动**:
 
-- [ ] 新增 checkpoint v3 reader/writer；保留已完成历史记录。
-- [ ] 为旧三车道场景提供一层 `laneId` 兼容映射，flag 关闭时不改变旧行为。
+- [ ] 新增 checkpoint schema v3 reader/writer，在同一 IndexedDB store 中识别 v2/v3；保留已完成历史记录和 AttemptRecord schema v2。
+- [ ] 为旧三车道场景提供 `laneId` → legacy lane index/场景推进字段的单向兼容镜像，flag 关闭或回滚到 1.1 时仍可读取。
 
 **Agent 执行约束**:
 
@@ -456,14 +542,14 @@ getRouteMiniMap(routeId, profile): MiniMapModel;
 
 **本阶段验证**:
 
-- **自动化测试**: lane adjacency、split/merge/turn、路段切换、可用动作、投影/裁剪、确定性重放和 checkpoint 迁移单元测试。
+- **自动化测试**: lane adjacency、split/merge/turn、左右 heading/steering 符号、路段切换、可用动作、投影/裁剪、确定性重放；checkpoint v2→v3 可迁移/不可迁移、v3 正常读取及 1.1 rollback fixture。
 - **手工 / workflow 验证**: Mac 键盘和手机触控各跑一次垂直切片；从远处看到左转车道出现，进入后车身视角确实移动，路口穿过视野并完成转向。
 - **回归检查**: Mirror–Signal–Shoulder–Move、速度保持、音频、小地图容器、Pause 和评分不回退。
 - **失败 / 边界检查**: 在车道出现前请求变道、越过实线、错过袋形车道、到停止线仍在错误车道、反复按键、页面失焦。
 
 **退出标准**:
 
-- [ ] 左转专用车道不依赖文字也能被 Owner 识别。
+- [ ] Owner 在 Mac 与手机横屏确认左转袋形车道、车道增减、停止线和信号灯无需文字解释也能正确辨识。
 - [ ] Engine、Canvas、HUD 的 `laneId` 在自动化断言和手工观察中一致。
 - [ ] 不再出现漂浮白线、固定路口、脱离路口的信号灯或方向盘长时间不回正。
 
@@ -476,7 +562,8 @@ getRouteMiniMap(routeId, profile): MiniMapModel;
 - [ ] 完成停车场出口、地方道路、城市主干道、左转路口、高速入口、主线、出口及返回道路的 RoadSections。
 - [ ] 将 6 类教学场景通过 `routeBinding` 放入合适路段和 decision zone；不改变既有评分所有权。
 - [ ] 重构 `RouteMiniMap.tsx`，从 RouteGraph 绘制简化路线、关键道路类型、当前 edge 和进度。
-- [ ] 扩展 Coach facts：`lane-role-is`、`lane-transition-available`、`intersection-distance-band`、`road-section-kind`。
+- [ ] 更新 `src/domain/guidance.ts`、`src/content/guidance.ts` 及其测试，扩展 Coach facts：`lane-role-is`、`lane-transition-available`、`intersection-distance-band`、`road-section-kind`。
+- [ ] 将 GuidancePlan 中依赖固定 `lane-is: -1|0|1` 的条件迁移为车道角色/transition 条件；兼容期 adapter 只读取由 `laneId` 派生的 legacy index。
 - [ ] 练习模式显示结构性提示；考试模式隐藏答案式提示，但保留现实可见道路标线。
 - [ ] 增加动态 accessible road summary，朗读当前道路类型、可用同向车道数和当前车道角色。
 
@@ -493,7 +580,7 @@ getRouteMiniMap(routeId, profile): MiniMapModel;
 
 **本阶段验证**:
 
-- **自动化测试**: 完整路线图连通、所有场景可达、固定 seed 重放、Coach/Exam 路况相同、MiniMap 进度、无障碍标签和内容快照。
+- **自动化测试**: 完整路线图连通、所有场景可达、固定 seed 重放、Coach/Exam 路况相同、旧/new GuidancePredicate 兼容、MiniMap 进度、无障碍标签和内容快照。
 - **手工 / workflow 验证**: 用 Exam 和 Guided Practice 各完成一条路线；核对同向 1/2/3 车道、左转袋、入口、主线、出口均自然出现。
 - **回归检查**: 六类场景的结果、危险后继续练完、反馈语气和报告结构符合两份 Locked 设计。
 - **失败 / 边界检查**: 错过出口、错误车道转弯、汇入失败、路线暂停/恢复、刷新后 checkpoint、手机横屏小地图降级。
@@ -502,18 +589,20 @@ getRouteMiniMap(routeId, profile): MiniMapModel;
 
 - [ ] Newmarket 考点选择产生清楚、稳定、可重复的道路画像。
 - [ ] Exam、Guided Practice 和典型场景均通过端到端验收。
+- [ ] Owner 确认完整走廊的结构变化服务 G Test 规则训练，不存在只为展示技术而随意增加的道路变化。
 - [ ] 页面无业务网络请求，教学近似声明和公开名称来源可见。
 
-### Phase 4: 发布硬化、公开验收与旧实现退场
+### Phase 4: 发布硬化、公开验收与兼容观察
 
-**目标**: 完成 1.2.0 发布质量验证，在公开 GitHub Pages 上验收后移除临时兼容风险。
+**目标**: 完成 1.2.0 发布质量验证和公开 GitHub Pages 验收，同时保留一个发布周期的 1.1 回滚路径。
 
 **实现范围**:
 
 - [ ] 增加桌面与手机横屏关键帧视觉回归：地方道路、袋形左转、路口近景、匝道汇入、出口。
-- [ ] 增加 15–20 分钟完整路线 E2E、checkpoint v2/v3、feature flag 和回滚测试。
+- [ ] 在 `e2e/app.spec.ts`、`e2e/practice.spec.ts` 及必要的新 spec 中增加 15–20 分钟完整路线、checkpoint v2/v3、feature flag 和回滚测试。
 - [ ] 更新 README、版本号、公开免责声明、来源声明、操作说明和 release notes。
-- [ ] 检查并删除 Phase 2/3 遗留的调试覆盖层、未使用兼容代码和占位道路数据。
+- [ ] 更新 `.github/workflows/deploy.yml`，在 1.2.0 Pages build 中显式设置 `VITE_NEWMARKET_ROAD_PROFILE_ENABLED="true"`。
+- [ ] 删除 Phase 2/3 遗留的调试覆盖层、未使用代码和占位道路数据；不得删除本设计明确要求保留一个发布周期的 1.1 回滚字段与 flag-off 路径。
 - [ ] 构建并发布 GitHub Pages，验证生产 URL 和静态资源 base path。
 
 **数据 / migration 改动**:
@@ -523,38 +612,39 @@ getRouteMiniMap(routeId, profile): MiniMapModel;
 
 **Agent 执行约束**:
 
-- **必须遵守**: 发布前以真实 Pages URL 完成 smoke test；测试截图必须检查道路结构而不只检查元素存在；任何证据或许可问题阻止发布。
+- **必须遵守**: 先用启用 flag 的 production build 完成本地/CI 门禁，再部署到真实 Pages URL 完成 smoke test；测试截图必须检查道路结构而不只检查元素存在；任何来源声明或素材许可问题阻止发布。
 - **禁止做**: 为赶发布降低 validator 严格度；用跳过 E2E 掩盖不稳定；未验证就移除回滚开关。
 - **不确定时先问**: 公开页面出现与地图许可、官方关联或“考试路线”措辞有关的歧义；旧存档迁移会丢失用户历史。
 
 **本阶段验证**:
 
-- **自动化测试**: lint、typecheck、unit/component、完整 Playwright、build、静态产物无意外外链请求；现有回归套件全部通过。
+- **自动化测试**: 执行 `npm run check:release`，覆盖 lint、内容校验、typecheck/build、unit/component 和完整 Playwright；另检查静态产物无意外外链请求，现有回归套件全部通过。
 - **手工 / workflow 验证**: Owner 在 Mac 完成一次 15–20 分钟 Exam smoke test，并在手机横屏完成 Guided Practice 关键场景；检查左转线、车道变化、路口接近、小地图和报告。
 - **回归检查**: GitHub Pages 刷新深链、音频解锁、键盘/触控、存档恢复、About/来源声明、无控制台错误。
 - **失败 / 边界检查**: 禁用 flag 回到旧实现；损坏 checkpoint；离线加载；窄屏；低帧率设备的降级表现。
 
 **退出标准**:
 
-- [ ] 全部自动化与公开 smoke test 通过，测试报告归档至 `docs/test-reports/`。
+- [ ] 全部自动化与公开 smoke test 通过，测试报告归档至 `my-ai-brain/docs/test-reports/`。
+- [ ] Owner 在公开站点完成一次 15–20 分钟 Exam smoke test，并在手机横屏完成 Guided Practice 关键场景检查。
 - [ ] Owner 确认 Newmarket 画像有训练意义且没有误导为官方固定路线。
-- [ ] 发布 `1.2.0`；稳定观察一个发布周期后再决定移除旧道路兼容路径。
+- [ ] 产品发布 `1.2.0`；稳定观察一个发布周期后再决定移除旧道路兼容路径。
 
 ### 整体验收
 
 | 验收领域 | 验证内容 | 命令 / 方法 | 合并前是否必须 |
 |---|---|---|---|
-| 单元 / 组件 | profile validator、图连通、车道 transition、Engine、RoadFrame、Coach facts、MiniMap | 使用仓库 `package.json` 已定义的 unit/typecheck/lint 命令 | Yes |
-| 集成 / workflow | 完整路线、模式一致性、checkpoint v3、固定 seed 重放 | integration tests + production build preview | Yes |
-| 端到端 / 运维 | 键盘/触控完成地方路—左转—高速—出口；公开 Pages smoke test | Playwright desktop/mobile + `https://nieyy.github.io/ontario-g-test/` | Yes |
-| 回归测试 | 既有 Exam/Guided Practice、评分、速度、音频、暂停、报告 | 全量既有测试套件 | Yes |
+| 单元 / 组件 | profile validator、图连通、车道 transition、Engine、RoadFrame、Coach facts、MiniMap | `npm run check` | Yes |
+| 集成 / workflow | 完整路线、模式一致性、checkpoint v3、固定 seed 重放 | `npm run check:release` + production build preview | Yes |
+| 端到端 / 运维 | 键盘/触控完成地方路—左转—高速—出口；公开 Pages smoke test | `npm run test:e2e` + `https://nieyy.github.io/ontario-g-test/` | Yes |
+| 回归测试 | 既有 Exam/Guided Practice、评分、速度、音频、暂停、报告 | `npm run check:release` | Yes |
 | 回滚 / 兼容性 | flag 关闭、v2 checkpoint、旧报告可读 | migration fixtures + 手工回滚演练 | Yes |
 | 内容与许可 | 轻量来源记录、教学近似声明、非官方路线声明、零地图运行时请求 | 人工审阅 + 浏览器 Network 面板 | Yes |
 
 **必要测试数据 / fixtures**:
 
-- 合法的 Newmarket 完整 profile 和每类 RoadSection 最小 fixture。
-- 断链 route、悬空 lane、无 transition 的车道结束、非法对向变道、错误箭头、把道路几何误标为 `verified-context` 的内容。
+- 合法的 Newmarket 完整 profile，以及每类 RoadSection、中心线、分段标线、taper、RouteMovement 和路口的最小 fixture。
+- 断链 route、错误 traversal、异常 centerline、重叠/悬空 lane、标线空洞、无 transition 的车道结束、非法对向变道、错误 taper、悬空/跨错 section 的 RouteMovement、缺路口定义、错误箭头、把道路几何误标为 `verified-context` 的内容。
 - v2 可迁移、v2 不可迁移、v3 正常和损坏 checkpoint。
 - 固定输入序列：地方路行驶、进入左转袋、完成转弯、匝道加速汇入、进入出口车道、错过出口。
 
@@ -579,18 +669,18 @@ getRouteMiniMap(routeId, profile): MiniMapModel;
 
 ## 8. 发布和回滚
 
-- **发布顺序**: 合并 profile/schema（flag off）→ 合并垂直切片（flag off）→ 完整路线和 E2E → 打开 flag → 发布 1.2.0 → 公开 smoke test。
-- **Feature flag / 配置开关**: `NEWMARKET_ROAD_PROFILE_ENABLED`；生产启用前必须通过 Phase 4。开关不通过 query string 暴露给普通用户。
+- **发布顺序**: 合并 profile/schema（flag off）→ 合并垂直切片（flag off）→ 完整路线和 E2E → 用 flag on 构建并通过本地/CI 发布前检查 → 部署 1.2.0 → 公开 smoke test。
+- **Feature flag / 配置开关**: `VITE_NEWMARKET_ROAD_PROFILE_ENABLED`；只有值为 `"true"` 时启用。GitHub Pages workflow 在 1.2.0 发布构建中显式设置为 `"true"`；开关不通过 query string 暴露给普通用户。
 - **部署顺序**: 本地全量测试 → production build preview → push main → GitHub Actions Pages → 生产 URL 验证。
 - **发布期间监控**: Actions 状态、Pages HTTP/静态资源、浏览器 console、关键操作和 checkpoint 恢复；不新增用户遥测。
-- **回滚步骤**: 先关闭 build flag 并重新部署；若问题仍在，回退到最后通过 smoke test 的 Pages commit。
-- **如果回滚，数据如何清理**: 不删除 AttemptRecord；v3 checkpoint 保留但旧版本不自动读取，重新启用后可恢复。只有用户显式确认才清除不可恢复的当前驾驶。
+- **回滚步骤**: 提交仅把 Pages workflow build flag 改为 `"false"` 的回滚 commit 并重新部署；若问题仍在，回退到最后通过 smoke test 的 Pages commit。
+- **如果回滚，数据如何清理**: 不删除 AttemptRecord 或 v3 checkpoint。flag-off/1.1 只通过 deprecated 兼容镜像尝试恢复；无法安全恢复时提示开始新驾驶但不自动删记录，重新启用 1.2 后仍可读取原始 RoadPosition。只有用户显式确认才清除当前驾驶。
 
 ## 9. 风险和缓解
 
 | 风险 | 影响 | 缓解方式 | 测试 / 信号 |
 |---|---|---|---|
-| 把教学路线误解成官方考试路线 | 误导考生、损害可信度 | 全程使用 “Newmarket-inspired / 教学近似”，记录证据等级，不提供路线预测 | 文案审阅、About 和路线选择页检查 |
+| 把教学路线误解成官方考试路线 | 误导考生、损害可信度 | 全程使用 “Newmarket-inspired / 教学近似”，记录来源分类，不提供路线预测 | 文案审阅、About 和路线选择页检查 |
 | 地图数据许可不清 | 无法安全发布 | 首版不复制/追踪第三方地图几何或素材，只保存公开名称来源和人工 authored 结构 | 来源记录、Network/仓库资产审计 |
 | 车道状态与画面再次脱节 | 核心交互失真 | Engine 单一真相、稳定 laneId、RoadFrame 单一路径、禁止屏幕偏移伪装 | 输入重放、截图关键帧、状态覆盖层 |
 | 路段连接产生漂浮标线或跳变 | 视觉诡异、无法判断路口距离 | 统一世界坐标、切片裁剪、transition 几何规则、near-plane 测试 | geometry tests、由远及近 E2E |
@@ -609,9 +699,20 @@ getRouteMiniMap(routeId, profile): MiniMapModel;
 - [x] 当前发布 commit、目标版本、feature flag 和迁移边界明确。
 - [x] 真实道路事实、教学近似和官方路线声明的边界明确。
 - [x] Canvas、Engine、Coach、MiniMap 的状态所有权明确。
+- [x] Owner 已要求完成正式审阅；本文已收口为 `Locked v1.0`，实现以本版本为基线。
+- [ ] 每个 Phase 到达退出标准时生成对应 test report，并由 Owner 接受或退回。
+- [ ] 实现若需要复制真实地图几何、增加远程服务或改变已锁定的状态所有权，先修订设计，不静默扩大范围。
 
-## 11. Open Questions
+## 11. Open Questions（已关闭）
 
-- [ ] **Phase 2 视觉门禁**: Owner 在 Mac 与手机横屏确认左转袋形车道、车道增减、停止线和信号灯无需文字解释也能正确辨识。
-- [ ] **Phase 3 教学门禁**: Owner 确认完整走廊的结构变化服务 G Test 规则训练，而不是为了展示技术随意增加道路变化。
-- [ ] **Phase 4 发布门禁**: Owner 完成公开站点 15–20 分钟 smoke test 后，文档从 Draft 收口为 Locked v1.0，产品才能标记为 1.2.0。
+截至 v1.0 没有阻塞实现的开放问题，以下决策已锁定为实现基线：
+
+- 保留 React、TypeScript 和 Canvas 2.5D，不接入实时 3D、在线地图、Street View 或付费地图服务。
+- 首版只提供 Newmarket；真实考点地址和公开道路名称用于地域语境，全部路线和道路几何均为 `authored-approximation`。
+- Newmarket 教学走廊使用七类可复用道路模板，车道数量随 RoadProfile 确定性变化，不随机换皮。
+- `DrivingEngine` 持有唯一 `RoadPosition`，稳定 `laneId` 取代固定 `-1|0|1`；Canvas、MiniMap、Scoring 和 Coach 都是消费者。
+- RoadProfile 负责静态道路结构和教学限速，Scenario 负责指令、动态信号/gap 和评分目标，重复旧字段仅作单向兼容镜像。
+- checkpoint 升级到 schema v3、AttemptRecord 保持 schema v2；一个发布周期内保留 1.1 rollback 字段和 build flag。
+- Phase 2 视觉验收、Phase 3 教学验收和 Phase 4 公开 smoke test 是实施 gate，不是编码前等待 Owner 回答的开放问题。
+
+实现若需要偏离以上任一锁定决策，必须先提交 v1.1+ 设计修订并重新评审，不能在代码中静默改变范围或状态所有权。
